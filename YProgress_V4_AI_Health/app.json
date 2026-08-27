@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "YProgress",
+    "slug": "yprogress",
+    "version": "4.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "yprogress",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.yacine.yprogress"
+    },
+    "android": {"package":"com.yacine.yprogress"},
+    "plugins": [
+      ["expo-notifications", {"sounds":[]}],
+      ["expo-image-picker", {"cameraPermission":"YProgress utilise la caméra pour analyser tes repas.","photosPermission":"YProgress utilise tes photos pour analyser et suivre tes repas."}],
+      ["apple-health", {"healthSharePermission":"YProgress veut lire tes pas, ton sommeil, ton poids et ton activité pour personnaliser ton coaching.","healthUpdatePermission":"YProgress peut enregistrer les données que tu choisis de synchroniser.","backgroundDelivery":true}]
+    ]
+  }
+}

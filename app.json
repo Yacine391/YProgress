@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "YProgress",
+    "slug": "yprogress",
+    "version": "15.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "yprogress",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.yacine.yprogress",
+      "infoPlist": {
+        "NSCameraUsageDescription": "YProgress utilise la cam\u00e9ra pour analyser tes repas.",
+        "NSPhotoLibraryUsageDescription": "YProgress utilise tes photos pour suivre ta progression."
+      }
+    },
+    "android": {
+      "package": "com.yacine.yprogress"
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "sounds": []
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "YProgress utilise tes photos pour suivre ta progression.",
+          "cameraPermission": "YProgress utilise la cam\u00e9ra pour analyser tes repas."
+        }
+      ]
+    ],
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./public/icon-512.png"
+    }
+  }
+}

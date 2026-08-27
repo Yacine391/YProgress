@@ -1,0 +1,28 @@
+{
+  "name": "yprogress",
+  "version": "15.0.0",
+  "private": true,
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "test:static": "node tests/static/check_files.js",
+    "test:core": "node tests/core/run.js",
+    "test": "npm run test:static && npm run test:core",
+    "web": "expo start --web",
+    "build:web": "expo export --platform web"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "expo": "~54.0.0",
+    "expo-image-picker": "~17.0.0",
+    "expo-notifications": "~0.32.0",
+    "expo-status-bar": "~3.0.0",
+    "react": "19.1.0",
+    "react-native": "0.81.4",
+    "react-dom": "19.1.0",
+    "react-native-web": "~0.20.0",
+    "@expo/metro-runtime": "~6.1.2"
+  }
+}

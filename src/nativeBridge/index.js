@@ -1,0 +1,1 @@
+export const nativeBridge={health:{status:"unavailable-on-web"},widget:{status:"unavailable-on-web"},liveActivity:{status:"unavailable-on-web"}};

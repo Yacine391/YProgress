@@ -1,0 +1,21 @@
+const assert=require("assert");
+function test(name,fn){try{fn();console.log("PASS",name);return true}catch(e){console.error("FAIL",name,"-",e.message);return false}}
+const results=[];
+const flags=require("../../src/core/featureFlags.js");
+results.push(test("native integrations gated",()=>{for(const k of ["healthKit","aiVision","aiCoach","voice","widget","liveActivity"])assert.equal(flags.FEATURES[k],false)}));
+const sleep=require("../../src/services/health/sleepAutoDetection.js").sleepAutoDetection;
+results.push(test("HealthKit sleep is confirmed",()=>{const r=sleep.inferWindow({lastActivityAt:"23:30",plannedWake:"07:30",healthKitSleep:{start:"23:40",end:"07:20"}});assert.equal(r.status,"confirmed");assert.equal(r.confidence,1)}));
+results.push(test("device inactivity is only estimated",()=>{const r=sleep.inferWindow({lastActivityAt:"23:30",plannedWake:"07:30"});assert.equal(r.status,"estimated");assert(r.confidence<1)}));
+results.push(test("no sleep signal is unknown",()=>{assert.equal(sleep.inferWindow({plannedWake:"07:30"}).status,"unknown")}));
+results.push(test("morning reconciliation prefers HealthKit",()=>{const r=sleep.morningReconcile({estimated:{start:"23:30"},healthKitSleep:{start:"23:42",end:"07:30"}});assert.equal(r.status,"confirmed")}));
+const auto=require("../../src/core/autopilot.js");
+results.push(test("Autopilot caps actions at 3",()=>{const r=auto.buildAutopilotSnapshot({targets:{calories:2500,protein:110,steps:10000},total:{calories:900,protein:30},health:{sleepMin:350,steps:1000},phase:"test",training:{jjb:true}});assert(r.actions.length<=3)}));
+results.push(test("minimum day contains no punitive action",()=>{const s=auto.minimumDay().join("|").toLowerCase();assert(!/fast|compens|punish/.test(s))}));
+results.push(test("plateau requires sufficient history",()=>{const r=auto.detectPlateau([{weight:55},{weight:55}],"lean_gain");assert.equal(r.detected,false);assert.equal(r.reason,"insufficient_data")}));
+results.push(test("healthy gain is not plateau",()=>{const h=Array.from({length:14},(_,i)=>({weight:55+i*.04}));assert.equal(auto.detectPlateau(h,"lean_gain").detected,false)}));
+results.push(test("flat weight detects plateau and suggests 150 kcal",()=>{const h=Array.from({length:14},()=>({weight:55}));const r=auto.detectPlateau(h,"lean_gain");assert.equal(r.detected,true);assert.equal(r.suggestedCalories,150)}));
+results.push(test("recovery score stays 0..100",()=>{for(const x of [{sleepMin:100},{sleepMin:450},{sleepMin:1000}]){const r=auto.calculateRecovery(x);assert(r>=0&&r<=100)}}));
+const intel=require("../../src/core/intelligence.js");
+results.push(test("sleep debt raises target",()=>{const r=intel.buildSleepRecommendation({nowMinutes:22*60,wakeMinutes:7*60+30,avgSleepMin:450,sleepDebtMin:120});assert(r.desiredSleepMin>450)}));
+results.push(test("short remaining window becomes urgent",()=>{const r=intel.buildSleepRecommendation({nowMinutes:1*60,wakeMinutes:7*60,avgSleepMin:480,sleepDebtMin:60});assert.equal(r.urgency,"high")}));
+process.exit(results.every(Boolean)?0:1);
