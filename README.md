@@ -1,6 +1,6 @@
-# YProgress V8 — Foundation
+# YProgress V15 — AI Coach
 
-Cette version prépare la base complète de l'application afin de pouvoir remplir les fonctionnalités progressivement sans réécrire l'architecture.
+Application Expo mobile-first de nutrition, récupération et entraînement adaptatif. Le moteur déterministe calcule les charges suivantes à partir des performances réelles et du contexte de récupération ; OpenRouter sert uniquement à expliquer et coacher.
 
 Test UI:
 ```bash
@@ -11,7 +11,8 @@ npx expo start
 Architecture:
 - `src/domain` : règles métier
 - `src/services` : stockage, HealthKit, IA, notifications
-- `src/features` : modules UI
+- `src/features/training` : programme hebdomadaire et données d'exercices
+- `src/core/progression.js` : moteur déterministe de progression des charges
 - `server` : API IA sécurisée
 - `docs` : architecture et roadmap
 

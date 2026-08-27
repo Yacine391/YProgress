@@ -5,6 +5,19 @@ function cleanText(value) {
   return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, 5000);
 }
 
+function validatePayload(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('INVALID_PAYLOAD');
+  const serialized = JSON.stringify(payload);
+  if (serialized.length > 50000) throw new Error('PAYLOAD_TOO_LARGE');
+  const recentWorkouts = Array.isArray(payload.recentWorkouts) ? payload.recentWorkouts.slice(-30) : [];
+  return {
+    profile: payload.profile && typeof payload.profile === 'object' ? payload.profile : {},
+    today: payload.today && typeof payload.today === 'object' ? payload.today : {},
+    recentWorkouts,
+    coachContext: payload.coachContext && typeof payload.coachContext === 'object' ? payload.coachContext : {}
+  };
+}
+
 function buildPrompt(payload) {
   const { profile = {}, today = {}, recentWorkouts = [], coachContext = {} } = payload || {};
   return `Tu es YProgress Coach, un coach sportif et nutritionnel personnel. Réponds en français, de façon concrète, courte et motivante. Tu ne fais aucun diagnostic médical et tu ne prétends jamais connaître une donnée qui n'est pas fournie.
@@ -36,6 +49,7 @@ async function callOpenRouter(payload) {
       'HTTP-Referer': process.env.APP_URL || 'https://y-progress.vercel.app',
       'X-Title': 'YProgress Coach'
     },
+    signal: AbortSignal.timeout(12000),
     body: JSON.stringify({
       model: FREE_MODEL,
       messages: [{ role: 'user', content: buildPrompt(payload) }],
@@ -51,13 +65,15 @@ async function callOpenRouter(payload) {
 async function coachHandler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'METHOD_NOT_ALLOWED' });
   try {
-    const message = await callOpenRouter(req.body || {});
+    const payload = validatePayload(req.body || {});
+    const message = await callOpenRouter(payload);
     if (!message) throw new Error('Réponse IA vide');
     return res.status(200).json({ ok: true, message, model: FREE_MODEL, provider: 'openrouter-free' });
   } catch (error) {
-    console.error('[coach]', error.message);
-    return res.status(503).json({ ok: false, error: 'COACH_UNAVAILABLE', message: error.message });
+    const clientError = ['INVALID_PAYLOAD','PAYLOAD_TOO_LARGE'].includes(error.message);
+    console.error('[coach]', clientError ? error.message : 'provider_unavailable');
+    return res.status(clientError ? 400 : 503).json({ ok: false, error: clientError ? error.message : 'COACH_UNAVAILABLE' });
   }
 }
 
-module.exports = { coachHandler, buildPrompt };
+module.exports = { coachHandler, buildPrompt, validatePayload };

@@ -2,6 +2,7 @@ const fs=require("fs"),path=require("path"),assert=require("assert");
 const root=path.resolve(__dirname,"../..");
 const required=[
 "App.js","package.json","app.json","src/core/autopilot.js","src/core/featureFlags.js",
+"src/core/progression.js","src/features/training/program.js",
 "src/domain/model.js","src/types/contracts.js","src/services/health/sleepAutoDetection.js",
 "src/services/storage/store.js","src/services/storage/memory.js","src/services/storage/privacy.js",
 "src/services/storage/offlineQueue.js","src/services/analytics/events.js",
