@@ -15,4 +15,6 @@ assert.equal(pkg.version,app.expo.version,"version mismatch");
 assert(pkg.dependencies.expo,"expo dependency missing");
 const flags=fs.readFileSync(path.join(root,"src/core/featureFlags.js"),"utf8");
 for(const k of ["healthKit:false","aiVision:false","aiCoach:false","voice:false","widget:false","liveActivity:false"]) assert(flags.includes(k),`flag ${k} not gated`);
+const appSource=fs.readFileSync(path.join(root,"App.js"),"utf8");
+for(const screen of ["Home","Nutrition","ProgressPage","Profile"]) assert(!appSource.includes(`<${screen}/>`),`${screen} must render without an unstable nested component identity`);
 console.log("PASS static foundation checks");

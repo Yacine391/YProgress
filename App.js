@@ -93,6 +93,7 @@ export default function App(){
   const [coach,setCoach]=useState("Appuie sur « Analyser ma journée » pour obtenir une décision claire.");
   const [coachLoading,setCoachLoading]=useState(false),[photo,setPhoto]=useState(null),[budget,setBudget]=useState("60");
   const [weekly,setWeekly]=useState({score:0,weightChange:0,avgCalories:0,avgProtein:0});
+  const [foodDraft,setFoodDraft]=useState({name:"",calories:"",protein:"",carbs:"",fat:""});
 
   useEffect(()=>{(async()=>{
     const all=JSON.parse(await AsyncStorage.getItem("logs")||"[]");
@@ -180,7 +181,7 @@ export default function App(){
   }
   async function changeTrainingWeek(week){const value=Math.max(1,Math.round(Number(week)||1));setTrainingWeek(value);await AsyncStorage.setItem("trainingWeek",String(value));}
 
-  function Home(){return <ScrollView contentContainerStyle={S.content}>
+  function Home(){return <ScrollView key="home" contentContainerStyle={S.content}>
     <View style={S.header}><View><Text style={S.eyebrow}>YPROGRESS • COACH OS</Text><Text style={S.title}>Salut Yacine 👋</Text><Text style={S.muted}>Ton coach décide avec toi.</Text></View><View style={S.avatar}><Text style={S.avatarText}>Y</Text></View></View>
     <View style={S.phase}><Text style={S.phaseIcon}>{phase.icon}</Text><View style={{flex:1}}><Text style={S.phaseTitle}>{phase.title}</Text><Text style={S.phaseSub}>{phase.sub}</Text></View><Text style={S.arrow}>›</Text></View>
     <Card style={S.hero}><View><Text style={S.eyebrow}>RESTE À MANGER</Text><Text style={S.heroNum}>{remaining}</Text><Text style={S.muted}>kcal • cible dynamique</Text></View><View style={S.glow}><Text style={{fontSize:32}}>🔥</Text></View></Card>
@@ -199,7 +200,7 @@ export default function App(){
     <Text style={S.section}>📅 Calendrier</Text><View style={S.timeline}>{["1–16 Sep","17–20 🇹🇳","Oct–Déc 🥋","Jan 🎓","Fév+ 💪"].map((x,i)=><View key={x} style={[S.timelineItem,(phase.key==="travel"&&i===1)||(phase.key==="internship"&&i===2)||(phase.key==="school"&&i===3)||(phase.key==="free"&&i===4)||(phase.key==="september"&&i===0)?S.timelineActive:null]}><Text style={S.timelineText}>{x}</Text></View>)}</View>
   </ScrollView>}
 
-  function Nutrition(){const[f,setF]=useState({name:"",calories:"",protein:"",carbs:"",fat:""});return <ScrollView contentContainerStyle={S.content}>
+  function Nutrition(){const f=foodDraft,setF=setFoodDraft;return <ScrollView key="nutrition" contentContainerStyle={S.content}>
     <Text style={S.title}>🍽️ Nutrition</Text><Text style={S.muted}>Le coach te dit quoi manger maintenant.</Text><Button title="🍽️ Je mange au restaurant" onPress={restaurantChoice} secondary/>
     <Pressable style={S.photoBox} onPress={photoMeal}>{photo?<Image source={{uri:photo}} style={S.photo}/>:<><Text style={{fontSize:40}}>📸</Text><Text style={S.photoTitle}>Photographier mon repas</Text><Text style={S.muted}>Analyse IA • calories • macros • confiance</Text></>}</Pressable>
     {restaurantMode&&<Card><Text style={S.section}>🍔 Mode restaurant</Text><Text style={S.text}>Choisis ce que tu veux manger. L’objectif est d’estimer puis d’adapter le reste de la journée, pas de culpabiliser.</Text><Button title="Voir mes choix" onPress={()=>Alert.alert("Choix","Poulet + riz • Steak + pommes de terre • Burger : choisis selon tes envies et le budget restant.")}/></Card>}{photo&&<Card><Text style={S.section}>🤖 Analyse IA</Text><Text style={S.text}>Photo prête à envoyer au serveur sécurisé.</Text><Button title="Analyser le repas" onPress={()=>Alert.alert("IA","Connecte le serveur IA pour l'analyse vision réelle.")}/><Button title="Supprimer" secondary onPress={()=>setPhoto(null)}/></Card>}
@@ -209,7 +210,7 @@ export default function App(){
     <Card><Text style={S.section}>Ajouter manuellement</Text><Field label="Repas" value={f.name} onChange={v=>setF({...f,name:v})}/><Field label="Calories" value={f.calories} onChange={v=>setF({...f,calories:v})} keyboardType="numeric"/><Field label="Protéines" value={f.protein} onChange={v=>setF({...f,protein:v})} keyboardType="numeric"/><Field label="Glucides" value={f.carbs} onChange={v=>setF({...f,carbs:v})} keyboardType="numeric"/><Field label="Lipides" value={f.fat} onChange={v=>setF({...f,fat:v})} keyboardType="numeric"/><Button title="+ Ajouter" onPress={async()=>{if(!f.name||!f.calories)return;await addLog(f);setF({name:"",calories:"",protein:"",carbs:"",fat:""})}}/></Card>
   </ScrollView>}
 
-  function ProgressPage(){return <ScrollView contentContainerStyle={S.content}><Text style={S.title}>📈 Progression</Text>
+  function ProgressPage(){return <ScrollView key="progress" contentContainerStyle={S.content}><Text style={S.title}>📈 Progression</Text>
     <Card><Text style={S.section}>⚖️ Poids</Text><Text style={S.weight}>{currentWeight} <Text style={S.kg}>kg</Text></Text><Text style={S.good}>Objectif : +0,15 à +0,30 kg/semaine</Text><View style={S.chart}>{[30,42,38,54,49,67,82].map((h,i)=><View key={i} style={[S.bar,{height:h}]}/>)}</View><Field label="Poids actuel" value={weight} onChange={setWeight} keyboardType="decimal-pad"/><Button title="Enregistrer" onPress={saveWeight}/></Card>
     <Card><Text style={S.section}>😴 Sommeil</Text><Field label="Coucher" value={sleep} onChange={setSleep}/><Field label="Réveil" value={wake} onChange={setWake}/><Field label="Qualité 1–5" value={quality} onChange={setQuality} keyboardType="numeric"/><Button title="Enregistrer" onPress={saveSleep}/></Card>
     <Card><Text style={S.section}>🔮 Projection</Text><Text style={S.text}>Si ta tendance actuelle continue, YProgress estimera ta trajectoire sur 4, 12 et 24 semaines.</Text><Text style={S.muted}>Ce sont des projections indicatives, pas des garanties.</Text></Card>
@@ -218,7 +219,7 @@ export default function App(){
     <Card><Text style={S.section}>📸 Timeline physique</Text><Text style={S.muted}>Semaine 1 → 4 → 8 → 12 → 16 → 20 → 24. Comparaison de photos dans la build native.</Text></Card>
   </ScrollView>}
 
-  function Profile(){return <ScrollView contentContainerStyle={S.content}><Text style={S.title}>⚙️ Profil</Text>
+  function Profile(){return <ScrollView key="profile" contentContainerStyle={S.content}><Text style={S.title}>⚙️ Profil</Text>
     <Card><Text style={S.section}>Tes bases</Text><Text style={S.text}>1,70 m • 55 kg • prise de masse progressive</Text><Text style={S.muted}>{targets.calories} kcal • {targets.protein}g protéines • {targets.fat}g lipides • ~{dynamicCarbs}g glucides</Text></Card>
     <Card><View style={S.switchLine}><View><Text style={S.section}>🔔 Notifications intelligentes</Text><Text style={S.muted}>Repas • entraînement • sommeil</Text></View><Switch value={notifications} onValueChange={scheduleNotifications}/></View></Card>
     <Card><Text style={S.section}>❤️ Apple Santé</Text><Text style={S.text}>Pas • sommeil • poids • énergie active</Text><Text style={S.muted}>HealthKit réel à activer dans la development build iOS.</Text></Card>
@@ -228,7 +229,7 @@ export default function App(){
   </ScrollView>}
 
   const progressionContext={sleepMin:health.sleepMin,fatigue:hardDay?5:2,proteinRatio:total.protein/targets.protein,calorieRatio:total.calories/targets.calories,hydrationRatio:water/waterTarget,jjbSessions:jjb?1:0,cardioSessions:jjb?1:0};
-  const pages={home:<Home/>,nutrition:<Nutrition/>,program:<ProgramPage selectedDayKey={selectedDayKey} setSelectedDayKey={setSelectedDayKey} week={trainingWeek} setWeek={changeTrainingWeek} drafts={workoutLogs} onSaveSet={saveTrainingSet} history={trainingHistory} onComplete={completeExercise} hardDay={hardDay} onEmergency={emergencyDay} progressionContext={progressionContext}/>,progress:<ProgressPage/>,profile:<Profile/>};
+  const pages={home:Home(),nutrition:Nutrition(),program:<ProgramPage key="program" selectedDayKey={selectedDayKey} setSelectedDayKey={setSelectedDayKey} week={trainingWeek} setWeek={changeTrainingWeek} drafts={workoutLogs} onSaveSet={saveTrainingSet} history={trainingHistory} onComplete={completeExercise} hardDay={hardDay} onEmergency={emergencyDay} progressionContext={progressionContext}/>,progress:ProgressPage(),profile:Profile()};
   return <SafeAreaView style={S.safe}><StatusBar style="light"/>{pages[tab]}<View style={S.bottom}>{[["home","⌂","Accueil"],["nutrition","◉","Nutrition"],["program","✦","Programme"],["progress","⌁","Progrès"],["profile","⚙","Profil"]].map(([id,ic,l])=><Pressable key={id} onPress={()=>setTab(id)} style={[S.nav,tab===id&&S.navActive]}><Text style={[S.navIcon,tab===id&&S.navIconActive]}>{ic}</Text><Text style={[S.navText,tab===id&&S.navTextActive]}>{l}</Text></Pressable>)}</View></SafeAreaView>
 }
 
