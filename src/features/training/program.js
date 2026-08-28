@@ -12,15 +12,22 @@ const youtube=(id,title,channel="ScottHermanFitness",start=0)=>({provider:"youtu
 const exercise=(id,name,sets,minReps,maxReps,rest,muscles,startLoad,video)=>({id,name,sets,minReps,maxReps,rest,muscles,startLoad,video:{...video,exerciseId:id}});
 const activity=(id,name,duration,rest,muscles,video)=>({id,name,duration,rest,muscles,video});
 
+const drillGroup=(names,muscles,video)=>names.map(name=>({name,muscles,video}));
+const PASS_VIDEO=youtube("o4jrNmJvYB8","Open Guard Passing Styles, Techniques & Concepts","Knight Jiu-Jitsu");
+const SWEEP_VIDEO=youtube("qp5AXBHxQec","The First 4 Sweeps You Need To Know","Knight Jiu-Jitsu");
+const SUB_VIDEO=youtube("hY35pBOfSNk","The First 5 Submissions You Need To Know","Knight Jiu-Jitsu");
+const MOUNT_VIDEO=youtube("Kcn78sJtPpo","The First 5 Mount Escapes You Need to Know","Chewjitsu");
+const SOLO_VIDEO=youtube("kd6tg6wS1_A","BJJ Warm-ups and Solo Drills","Dominion BJJ");
+const TRIANGLE_VIDEO=youtube("9pjdpFCr4UI","Triangle Choke From Closed Guard","Chewjitsu");
+
+// 30 semaines × 2 séances : aucune technique répétée avant mars 2027.
 export const JJB_DRILLS=[
-  {name:"Toreando pass",muscles:"Passage de garde ouverte",video:youtube("o4jrNmJvYB8","Toreando style pass","Knight Jiu-Jitsu",200)},
-  {name:"Hip bump sweep",muscles:"Renversement depuis garde fermée",video:youtube("qp5AXBHxQec","Hip bump sweep","Knight Jiu-Jitsu",0)},
-  {name:"Leg drag depuis toreando",muscles:"Enchaînement de passage",video:youtube("o4jrNmJvYB8","Toreando vers leg drag","Knight Jiu-Jitsu",260)},
-  {name:"Triangle depuis garde fermée",muscles:"Soumission et contrôle de posture",video:youtube("9pjdpFCr4UI","Triangle choke from closed guard","Chewjitsu")},
-  {name:"Headquarters pass",muscles:"Contrôle et passage debout",video:youtube("o4jrNmJvYB8","Headquarters passing options","Knight Jiu-Jitsu",314)},
-  {name:"Échappements de mount",muscles:"Pont, cadrage et récupération de garde",video:youtube("Kcn78sJtPpo","Five mount escapes","Chewjitsu")},
-  {name:"Double under pass",muscles:"Passage sous les jambes",video:youtube("o4jrNmJvYB8","Double under passing","Knight Jiu-Jitsu",430)},
-  {name:"Soumissions fondamentales",muscles:"Armbar, triangle et étranglements",video:youtube("hY35pBOfSNk","First five submissions","Knight Jiu-Jitsu")}
+  ...drillGroup(["Toreando : contrôle des chevilles","Toreando : déplacement latéral","Toreando : stabilisation side control","Toreando vers leg drag","Leg drag : contrôle de hanche","Leg drag : passage et stabilisation","Headquarters : entrée","Headquarters : knee cut","Headquarters : smash pass","Double under : entrée sous les jambes","Double under : stack et passage","Passage assis : contrôle des poignets","Passage assis : changement d’angle","Kimura trap pour passer","Chaîne toreando → leg drag","Chaîne headquarters → knee cut"],"Passage de garde ouverte",PASS_VIDEO),
+  ...drillGroup(["Elevator sweep : placement des crochets","Elevator sweep : déséquilibre et montée","Hip bump sweep : contrôle de posture","Hip bump sweep : montée de hanche","Scissor sweep : cadrage et angle","Scissor sweep : coupe et finition","Pendulum sweep : contrôle du bras","Pendulum sweep : balancier et montée","Chaîne hip bump → kimura","Chaîne hip bump → guillotine","Chaîne scissor → technical stand-up","Choisir le sweep selon la base"],"Renversements depuis la garde fermée",SWEEP_VIDEO),
+  ...drillGroup(["Armbar : isolation du bras","Armbar : angle et finition","Triangle : casser la posture","Triangle : verrouillage et angle","Rear naked choke : contrôle du dos","Rear naked choke : finition propre","Guillotine : contrôle de tête","Guillotine : fermeture et garde","Americana : contrôle du coude","Americana : finition progressive"],"Soumissions fondamentales",SUB_VIDEO),
+  ...drillGroup(["Mount escape : trap and roll","Mount escape : pont et retournement","Mount escape : elbow escape","Mount escape : récupération du genou","Mount escape : kipping frames","Mount escape : connexion des genoux","Mount escape : heel drag","Mount escape : sortie vers demi-garde","Mount escape : protéger les bras","Chaîne upa → elbow escape"],"Défense et sorties de mount",MOUNT_VIDEO),
+  ...drillGroup(["Triangle : entrée poignet-biceps","Triangle : contrôle de posture","Triangle : couper l’angle","Triangle : finition sans tirer la tête"],"Triangle depuis garde fermée",TRIANGLE_VIDEO),
+  ...drillGroup(["Shrimp et reverse shrimp","Bridge et déplacement des hanches","Leg fencing pour récupérer la garde","Hip scoot et entrée assise","Sit-through et retour en base","Granby roll contrôlé","Breakfall arrière sécurisé","Technical stand-up"],"Mouvements fondamentaux et mobilité JJB",SOLO_VIDEO)
 ];
 
 export function jjbDrillFor(week=1,dayKey="tue"){
