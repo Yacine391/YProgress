@@ -30,8 +30,7 @@
           "photosPermission": "YProgress utilise tes photos pour suivre ta progression.",
           "cameraPermission": "YProgress utilise la caméra pour analyser tes repas."
         }
-      ],
-      "expo-video"
+      ]
     ],
     "web": {
       "bundler": "metro",
