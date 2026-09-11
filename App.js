@@ -8,7 +8,7 @@ import {StatusBar} from "expo-status-bar";
 import {LinearGradient} from "expo-linear-gradient";
 import {WEEK_DAYS,WORKOUTS,dayByKey,dayKeyForDate,jjbDrillFor,EXERCISE_ALTERNATIVES,customExercise} from "./src/features/training/program";
 import {appendPerformance,historyForExercise,recommendNextLoad} from "./src/core/progression";
-import {buildGroceryList} from "./src/core/groceryPlanner";
+import {buildGroceryList,toggleGroceryItem,checkedTotal} from "./src/core/groceryPlanner";
 import {upsertDay,weeklySummary,weightSeries,sleepDebt,lastNDays,streak,hasSleep} from "./src/core/history";
 import {buildAutopilotSnapshot,detectPlateau} from "./src/core/autopilot";
 import {buildSleepRecommendation} from "./src/core/intelligence";
@@ -266,13 +266,32 @@ return <ScrollView key="home" contentContainerStyle={S.content}>
 </ScrollView>}
 
 function Nutrition({app}){
-const {foodDraft,setFoodDraft,restaurantChoice,photoMeal,photo,setPhoto,restaurantMode,remaining,pRemain,budget,setBudget,targets,generateGroceries,groceryList,dynamicCarbs,total,addLog}=app;
+const {foodDraft,setFoodDraft,restaurantChoice,photoMeal,photo,setPhoto,restaurantMode,remaining,pRemain,budget,changeBudget,targets,generateGroceries,groceryList,groceryChecked,toggleGrocery,clearGroceries,dynamicCarbs,total,addLog}=app;
 const f=foodDraft,setF=setFoodDraft;return <ScrollView key="nutrition" contentContainerStyle={S.content}>
   <Text style={S.title}>🍽️ Nutrition</Text><Text style={S.muted}>Le coach te dit quoi manger maintenant.</Text><Button title="🍽️ Je mange au restaurant" onPress={restaurantChoice} secondary/>
   <Pressable style={S.photoBox} onPress={photoMeal}>{photo?<Image source={{uri:photo}} style={S.photo}/>:<><Text style={{fontSize:40}}>📸</Text><Text style={S.photoTitle}>Photographier mon repas</Text><Text style={S.muted}>Analyse IA • calories • macros • confiance</Text></>}</Pressable>
   {restaurantMode&&<Card><Text style={S.section}>🍔 Mode restaurant</Text><Text style={S.text}>Choisis ce que tu veux manger. L’objectif est d’estimer puis d’adapter le reste de la journée, pas de culpabiliser.</Text><Button title="Voir mes choix" onPress={()=>Alert.alert("Choix","Poulet + riz • Steak + pommes de terre • Burger : choisis selon tes envies et le budget restant.")}/></Card>}{photo&&<Card><Text style={S.section}>🤖 Analyse IA</Text><Text style={S.text}>Photo prête à envoyer au serveur sécurisé.</Text><Button title="Analyser le repas" onPress={()=>Alert.alert("IA","Connecte le serveur IA pour l'analyse vision réelle.")}/><Button title="Supprimer" secondary onPress={()=>setPhoto(null)}/></Card>}
   <Card><Text style={S.section}>🍴 Qu'est-ce que je mange maintenant ?</Text><Text style={S.text}>Tu as {remaining} kcal et {pRemain} g de protéines à couvrir.</Text><View style={S.option}><Text style={S.text}>🥣 Skyr + banane + avoine</Text><Text style={S.muted}>≈ 430 kcal • 28 P</Text></View><View style={S.option}><Text style={S.text}>🍗 Poulet + riz + légumes</Text><Text style={S.muted}>≈ 620 kcal • 48 P</Text></View><View style={S.option}><Text style={S.text}>🥛 Shake + banane</Text><Text style={S.muted}>≈ 390 kcal • 30 P</Text></View></Card>
-  <Card><Text style={S.section}>🍕 J’ai fait un écart</Text><Text style={S.muted}>Aucune compensation extrême. On reprend simplement le plan normal au prochain repas.</Text><Button title="Revenir au plan" onPress={()=>Alert.alert("C’est bon","Pas besoin de compenser. Reprends simplement tes objectifs habituels.")} secondary/></Card><Card><Text style={S.section}>🛒 Mes premières courses</Text><Field label="Budget hebdomadaire (€)" value={budget} onChange={setBudget} keyboardType="decimal-pad"/><Text style={S.text}>Liste calculée pour 7 jours à partir de tes objectifs de {targets.calories} kcal et {targets.protein} g de protéines.</Text><Button title="Calculer ma liste de courses" onPress={generateGroceries}/>{groceryList&&<View style={S.groceryList}>{groceryList.items.map(item=><View key={item.id} style={S.groceryRow}><View style={{flex:1}}><Text style={S.text}>{item.quantity} × {item.name}</Text><Text style={S.muted}>{item.unit}</Text></View><Text style={S.groceryPrice}>{item.totalPrice.toFixed(2)} €</Text></View>)}<View style={S.groceryTotal}><Text style={S.section}>Total estimé</Text><Text style={S.groceryTotalValue}>{groceryList.total.toFixed(2)} €</Text></View><Text style={S.muted}>Reste sur le budget : {groceryList.remaining.toFixed(2)} €. Prix indicatifs à ajuster selon ton magasin.</Text></View>}</Card>
+  <Card><Text style={S.section}>🍕 J’ai fait un écart</Text><Text style={S.muted}>Aucune compensation extrême. On reprend simplement le plan normal au prochain repas.</Text><Button title="Revenir au plan" onPress={()=>Alert.alert("C’est bon","Pas besoin de compenser. Reprends simplement tes objectifs habituels.")} secondary/></Card><Card><View style={S.cardHead}><Text style={S.section}>🛒 Liste de courses</Text>{groceryList&&<Text style={S.ai}>{groceryChecked.length}/{groceryList.items.length}</Text>}</View>
+      <Field label="Budget hebdomadaire (€)" value={budget} onChange={changeBudget} keyboardType="decimal-pad"/>
+      <Text style={S.muted}>Calculée pour 7 jours à partir de {targets.calories} kcal et {targets.protein} g de protéines par jour.</Text>
+      <Button title={groceryList?"Recalculer ma liste":"Calculer ma liste de courses"} onPress={generateGroceries}/>
+      {groceryList&&<View style={S.groceryList}>
+        {groceryList.items.map(item=>{const done=groceryChecked.includes(item.id);return (
+          <Pressable key={item.id} accessibilityRole="checkbox" accessibilityState={{checked:done}} onPress={()=>toggleGrocery(item.id)} style={({pressed})=>[S.groceryRow,pressed&&S.buttonPressed]}>
+            <View style={[S.checkbox,done&&S.checkboxOn]}>{done&&<Text style={S.checkboxMark}>✓</Text>}</View>
+            <View style={{flex:1}}>
+              <Text style={[S.text,done&&S.groceryDone]}>{item.quantity} × {item.name}</Text>
+              <Text style={S.muted}>{item.unit}</Text>
+            </View>
+            <Text style={[S.groceryPrice,done&&S.groceryDone]}>{fr(item.totalPrice.toFixed(2))} €</Text>
+          </Pressable>);})}
+        <View style={S.groceryTotal}><View style={{flex:1}}><Text style={S.section}>Panier</Text><Text style={S.muted}>{fr(checkedTotal(groceryList,groceryChecked).toFixed(2))} € pris sur {fr(groceryList.total.toFixed(2))} €</Text></View><Text style={S.groceryTotalValue}>{fr(groceryList.total.toFixed(2))} €</Text></View>
+        <Progress value={checkedTotal(groceryList,groceryChecked)} target={groceryList.total||1}/>
+        <Text style={S.reason}>Cette liste couvre {groceryList.calorieCoverage} % de tes calories et {groceryList.proteinCoverage} % de tes protéines pour la semaine.</Text>
+        <Text style={S.muted}>{groceryList.remaining>2?`Il te reste ${fr(groceryList.remaining.toFixed(2))} € : acheter davantage reviendrait à manger au-delà de tes besoins.`:"Budget utilisé au maximum utile."} Prix indicatifs, à ajuster selon ton magasin.</Text>
+        <Button title="Vider la liste" onPress={clearGroceries} secondary/>
+      </View>}</Card>
   <Card><Text style={S.section}>🔥 Macros dynamiques</Text><Text style={S.text}>{remaining} kcal • {pRemain} g protéines • {Math.max(0,dynamicCarbs-total.carbs)} g glucides</Text></Card>
   <Card><Text style={S.section}>Ajouter manuellement</Text><Field label="Repas" value={f.name} onChange={v=>setF({...f,name:v})}/><Field label="Calories" value={f.calories} onChange={v=>setF({...f,calories:v})} keyboardType="numeric"/><Field label="Protéines" value={f.protein} onChange={v=>setF({...f,protein:v})} keyboardType="numeric"/><Field label="Glucides" value={f.carbs} onChange={v=>setF({...f,carbs:v})} keyboardType="numeric"/><Field label="Lipides" value={f.fat} onChange={v=>setF({...f,fat:v})} keyboardType="numeric"/><Button title="+ Ajouter" onPress={async()=>{if(!f.name||!f.calories)return;await addLog(f);setF({name:"",calories:"",protein:"",carbs:"",fat:""})}}/></Card>
 </ScrollView>}
@@ -361,7 +380,7 @@ export default function App(){
   const [coachStatus,setCoachStatus]=useState({state:"checking"}),[coachSource,setCoachSource]=useState(null);
   const [weekly,setWeekly]=useState({score:0,weightChange:0,avgCalories:0,avgProtein:0});
   const [foodDraft,setFoodDraft]=useState({name:"",calories:"",protein:"",carbs:"",fat:""});
-  const [groceryList,setGroceryList]=useState(null),[exerciseOverrides,setExerciseOverrides]=useState({});
+  const [groceryList,setGroceryList]=useState(null),[groceryChecked,setGroceryChecked]=useState([]),[exerciseOverrides,setExerciseOverrides]=useState({});
   const [journal,setJournal]=useState([]),[ready,setReady]=useState(false);
   const [profile,setProfile]=useState(null),[onboarding,setOnboarding]=useState(false);
   const journalRef=useRef([]);
@@ -382,6 +401,13 @@ export default function App(){
     const th=await store.get(KEYS.trainingHistory,[]);setTrainingHistory(Array.isArray(th)?th:[]);
     const tw=Number(await store.get(KEYS.trainingWeek,1));setTrainingWeek(Number.isInteger(tw)&&tw>0?tw:1);
     const eo=await store.get(KEYS.exerciseOverrides,{});setExerciseOverrides(eo&&typeof eo==="object"?eo:{});
+    // La liste de courses doit survivre au rechargement : sinon elle est inutilisable en magasin.
+    const savedGroceries=await store.get(KEYS.groceries,null);
+    if(savedGroceries&&typeof savedGroceries==="object"){
+      if(savedGroceries.list)setGroceryList(savedGroceries.list);
+      if(Array.isArray(savedGroceries.checked))setGroceryChecked(savedGroceries.checked);
+      if(savedGroceries.budget)setBudget(String(savedGroceries.budget));
+    }
 
     // Journal quotidien : c'est lui qui rend le sommeil, l'eau et le poids persistants.
     const saved=await store.get(KEYS.journal,[]);
@@ -636,12 +662,32 @@ export default function App(){
     await store.set(KEYS.targets,clean);
   }
 
-  function generateGroceries(){setGroceryList(buildGroceryList({budget,weeklyCalories:targets.calories*7,weeklyProtein:targets.protein*7}))}
+  async function persistGroceries(list,checked,budgetValue){
+    await store.set(KEYS.groceries,{list,checked,budget:budgetValue,updatedAt:Date.now()});
+  }
+  async function generateGroceries(){
+    const list=buildGroceryList({budget,weeklyCalories:targets.calories*7,weeklyProtein:targets.protein*7});
+    setGroceryList(list);setGroceryChecked([]);
+    await persistGroceries(list,[],budget);
+  }
+  async function toggleGrocery(id){
+    const next=toggleGroceryItem(groceryChecked,id);
+    setGroceryChecked(next);
+    await persistGroceries(groceryList,next,budget);
+  }
+  async function clearGroceries(){
+    setGroceryList(null);setGroceryChecked([]);
+    await store.remove(KEYS.groceries);
+  }
+  async function changeBudget(value){
+    setBudget(value);
+    if(groceryList)await persistGroceries(groceryList,groceryChecked,value);
+  }
 
   // Les écrans sont des composants de module : identité stable entre deux rendus,
   // donc plus de remontage ni de perte de scroll, et seul l'écran actif est construit.
   const app={phase,remaining,total,targets,stepValue,coach,coachLoading,analyze,autopilotActions,generateWeek,setTab,health,quality,jjb,gym,todayWorkout,water,waterTarget,setWaterAmount,addWater,caffeine,setCaffeine,recovery,dayStreak,
-    foodDraft,setFoodDraft,restaurantChoice,photoMeal,photo,setPhoto,restaurantMode,pRemain,budget,setBudget,generateGroceries,groceryList,dynamicCarbs,addLog,
+    foodDraft,setFoodDraft,restaurantChoice,photoMeal,photo,setPhoto,restaurantMode,pRemain,budget,changeBudget,generateGroceries,groceryList,groceryChecked,toggleGrocery,clearGroceries,dynamicCarbs,addLog,
     currentWeight,weight,setWeight,saveWeight,sleep,setSleep,wake,setWake,setQuality,saveSleep,weekly,weeklyAnalysis,plateau,sleepAdvice,journal,
     notifications,scheduleNotifications,saveTargets,setStepCount,ready,
     profile,saveProfile,openOnboarding:()=>setOnboarding(true),coachStatus,coachSource};
@@ -822,7 +868,11 @@ const S=StyleSheet.create({
   photo:{width:"100%",height:"100%"},
   photoTitle:{...T.section,fontSize:16,color:P.ink,marginTop:SP.sm},
   groceryList:{marginTop:SP.lg,paddingTop:SP.sm,borderTopWidth:1,borderTopColor:P.line},
-  groceryRow:{flexDirection:"row",alignItems:"center",gap:SP.md,paddingVertical:SP.md,borderBottomWidth:1,borderBottomColor:P.line},
+  groceryRow:{flexDirection:"row",alignItems:"center",gap:SP.md,minHeight:LAYOUT.tapTarget,paddingVertical:SP.md,borderBottomWidth:1,borderBottomColor:P.line},
+  checkbox:{width:26,height:26,borderRadius:RD.sm,borderWidth:2,borderColor:P.lineStrong,alignItems:"center",justifyContent:"center"},
+  checkboxOn:{borderColor:P.lime,backgroundColor:P.lime},
+  checkboxMark:{color:P.inkInverse,fontSize:15,fontWeight:"900",fontFamily:F.sans,lineHeight:17},
+  groceryDone:{color:P.inkFaint,textDecorationLine:"line-through"},
   groceryPrice:{fontFamily:F.cond,fontSize:16,fontWeight:"700",color:P.lime},
   groceryTotal:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",gap:SP.md,paddingTop:SP.lg},
   groceryTotalValue:{fontFamily:F.cond,fontSize:24,fontWeight:"700",color:P.ink},

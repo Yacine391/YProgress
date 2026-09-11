@@ -1,7 +1,26 @@
 const { createLimiter, clientKey } = require('./rateLimit');
 
-const FREE_MODEL = process.env.OPENROUTER_MODEL || 'openrouter/free';
+/**
+ * Chaîne de modèles, essayés dans l'ordre.
+ * Le premier est stable et bon en français ; openrouter/free ferme la marche
+ * car c'est un routeur aléatoire : utile en secours, mauvais en principal
+ * (la qualité et le style changent à chaque appel).
+ * Un modèle gratuit peut être momentanément saturé : on bascule au suivant.
+ */
+const DEFAULT_MODEL = 'google/gemma-4-31b-it:free';
+const FALLBACK_MODELS = ['nvidia/nemotron-3-super-120b-a12b:free', 'openrouter/free'];
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+// Budget total pour l'ensemble des tentatives : une fonction serverless a une
+// durée maximale, et l'utilisateur attend devant son écran.
+const TOTAL_BUDGET_MS = 20000;
+const PER_MODEL_MS = 9000;
+
+function modelChain() {
+  const configured = (process.env.OPENROUTER_MODEL || '').trim();
+  const chain = configured ? [configured] : [DEFAULT_MODEL];
+  for (const m of [DEFAULT_MODEL, ...FALLBACK_MODELS]) if (!chain.includes(m)) chain.push(m);
+  return chain;
+}
 
 const limiter = createLimiter();
 
@@ -128,9 +147,7 @@ HISTORIQUE D'ENTRAÎNEMENT RÉCENT
 ${JSON.stringify(recentWorkouts.slice(-10))}`;
 }
 
-async function callOpenRouter(payload) {
-  const key = process.env.OPENROUTER_API_KEY;
-  if (!key) throw new Error('OPENROUTER_API_KEY manquante sur le serveur');
+async function askModel(model, prompt, key, timeoutMs = PER_MODEL_MS) {
   const response = await fetch(OPENROUTER_URL, {
     method: 'POST',
     headers: {
@@ -139,10 +156,10 @@ async function callOpenRouter(payload) {
       'HTTP-Referer': process.env.APP_URL || 'https://y-progress.vercel.app',
       'X-Title': 'YProgress Coach'
     },
-    signal: AbortSignal.timeout(12000),
+    signal: AbortSignal.timeout(timeoutMs),
     body: JSON.stringify({
-      model: FREE_MODEL,
-      messages: [{ role: 'user', content: buildPrompt(payload) }],
+      model,
+      messages: [{ role: 'user', content: prompt }],
       temperature: 0.25,
       max_tokens: 600
     })
@@ -150,6 +167,28 @@ async function callOpenRouter(payload) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data?.error?.message || `OpenRouter HTTP ${response.status}`);
   return cleanText(data?.choices?.[0]?.message?.content);
+}
+
+async function callOpenRouter(payload) {
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) throw new Error('OPENROUTER_API_KEY manquante sur le serveur');
+  const prompt = buildPrompt(payload);
+  const deadline = Date.now() + TOTAL_BUDGET_MS;
+  let lastError = null;
+  for (const model of modelChain()) {
+    const remaining = deadline - Date.now();
+    // Moins de 2 s restantes : inutile de lancer un appel qu'on devra couper.
+    if (remaining < 2000) break;
+    try {
+      const message = await askModel(model, prompt, key, Math.min(PER_MODEL_MS, remaining));
+      if (message) return { message, model };
+      lastError = new Error('Réponse IA vide');
+    } catch (error) {
+      lastError = error;
+      console.error('[coach] modèle indisponible:', model);
+    }
+  }
+  throw lastError || new Error('Aucun modèle disponible');
 }
 
 async function coachHandler(req, res) {
@@ -169,9 +208,8 @@ async function coachHandler(req, res) {
 
   try {
     const payload = validatePayload(req.body || {});
-    const message = await callOpenRouter(payload);
-    if (!message) throw new Error('Réponse IA vide');
-    return res.status(200).json({ ok: true, message, model: FREE_MODEL, provider: 'openrouter-free' });
+    const { message, model } = await callOpenRouter(payload);
+    return res.status(200).json({ ok: true, message, model, provider: 'openrouter-free' });
   } catch (error) {
     const clientError = ['INVALID_PAYLOAD', 'PAYLOAD_TOO_LARGE'].includes(error.message);
     console.error('[coach]', clientError ? error.message : 'provider_unavailable');
@@ -179,4 +217,4 @@ async function coachHandler(req, res) {
   }
 }
 
-module.exports = { coachHandler, buildPrompt, validatePayload, limiter };
+module.exports = { coachHandler, buildPrompt, validatePayload, limiter, modelChain, DEFAULT_MODEL };

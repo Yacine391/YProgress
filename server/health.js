@@ -10,7 +10,7 @@ function healthHandler(req, res) {
   return res.status(200).json({
     ok: true,
     version: '15.6.0',
-    model: process.env.OPENROUTER_MODEL || 'openrouter/free',
+    model: require('./coach').modelChain()[0],
     appUrl: process.env.APP_URL || null,
     coach: {
       keyConfigured: key.length > 0,

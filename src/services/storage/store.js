@@ -17,6 +17,7 @@ export const KEYS = {
   trainingHistory: "trainingHistory",
   trainingWeek: "trainingWeek",
   exerciseOverrides: "exerciseOverrides",
+  groceries: "groceries",
   settings: "settings"
 };
 

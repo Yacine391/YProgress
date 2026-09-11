@@ -68,6 +68,13 @@ const healthSource=fs.readFileSync(path.join(root,"server/health.js"),"utf8");
 assert(!/(?:key|apiKey)\s*:\s*key\b/.test(healthSource),"health must never return the raw key");
 assert(healthSource.includes("keyConfigured")&&healthSource.includes("status"),"health must report an actionable coach status");
 
+// Liste de courses : inutilisable en magasin si elle disparaît au rechargement.
+assert(appSource.includes("KEYS.groceries"),"the grocery list must be persisted");
+assert(appSource.includes("toggleGrocery")&&appSource.includes("checkedTotal"),"grocery items must be checkable with a live basket total");
+const grocerySource=fs.readFileSync(path.join(root,"src/core/groceryPlanner.js"),"utf8");
+assert(grocerySource.includes("proteinCoverage")&&grocerySource.includes("calorieCoverage"),"the planner must report honest coverage");
+assert(!/priority\s*===\s*1\s*\?\s*3/.test(grocerySource),"the hardcoded quantity caps must be gone");
+
 // PWA : sans le lien manifest, l'app n'est pas installable sur iPhone.
 const indexHtml=fs.readFileSync(path.join(root,"public/index.html"),"utf8");
 for(const tag of ['rel="manifest"','apple-mobile-web-app-capable','apple-touch-icon','%WEB_TITLE%']) assert(indexHtml.includes(tag),`public/index.html must contain ${tag}`);
