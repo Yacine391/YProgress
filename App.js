@@ -15,11 +15,13 @@ import {buildSleepRecommendation} from "./src/core/intelligence";
 import {recoveryScore} from "./src/core/progression";
 import {sleepAutoDetection} from "./src/services/health/sleepAutoDetection";
 import {FEATURES} from "./src/core/featureFlags";
+import {SEXES,ACTIVITY_LEVELS,GOALS,computeTargets,isProfileComplete,maintenanceCalories,expectedWeeklyRange} from "./src/core/profile";
 import {palette as P,glass as GL,gradient as GR,space as SP,radius as RD,type as T,font as F,shadow as SH,LAYOUT,metricColumns,typeScale} from "./src/design/theme";
 
-const BASE={calories:2500,protein:110,fat:70,steps:10000,sleepMin:450,weight:55,heightCm:170,goal:"lean_gain"};
-const GOALS=[{id:"lean_gain",label:"Prise de masse"},{id:"recomp",label:"Recomposition"},{id:"cut",label:"Sèche"},{id:"maintain",label:"Maintien"}];
+const BASE={calories:2500,protein:110,fat:70,steps:10000,sleepMin:450};
+const BLANK_PROFILE={name:"",sex:"unspecified",age:"",heightCm:"",weight:"",activity:"moderate",goal:"lean_gain",sleepMin:450};
 const AI_BASE_URL=(process.env.EXPO_PUBLIC_AI_BASE_URL||"").replace(/\/$/,"");
+const fr=n=>String(n).replace(".",",");
 const iso=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`};
 const carbs=(k,p,f)=>Math.max(0,Math.round((k-p*4-f*9)/4));
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
@@ -66,9 +68,9 @@ function WeightChart({series=[],max=14}){
       return <View key={pt.date} style={[S.bar,{height:Math.max(8,10+ratio*80)},i===points.length-1&&S.barLast]}/>;
     })}</View>
     <View style={S.chartAxis}>
-      <Text style={S.chartAxisText}>{lo.toFixed(1)} kg</Text>
+      <Text style={S.chartAxisText}>{fr(lo.toFixed(1))} kg</Text>
       <Text style={S.chartAxisText}>{flat?"stable":`${points.length} pesées`}</Text>
-      <Text style={S.chartAxisText}>{hi.toFixed(1)} kg</Text>
+      <Text style={S.chartAxisText}>{fr(hi.toFixed(1))} kg</Text>
     </View>
   </View>;
 }
@@ -101,6 +103,85 @@ function ExerciseSwapModal({slot,onClose,onSelect}){
     <Text style={S.swapTitle}>MON EXERCICE PERSONNALISÉ</Text><Field label="Nom de l’exercice" value={name} onChange={setName}/><Field label="Charge de départ (kg)" value={load} onChange={setLoad} keyboardType="decimal-pad"/><Field label="ID YouTube facultatif" value={videoId} onChange={setVideoId}/><Button title="Ajouter à mes exercices" onPress={saveCustom}/>
     <Button title="Annuler" onPress={onClose} secondary/>
   </ScrollView></View></Modal>
+}
+
+/**
+ * Première utilisation : sans ces mesures, les objectifs ne seraient que
+ * des constantes. Le parcours est découpé en étapes courtes, une décision
+ * par écran, ce qui reste confortable sur téléphone.
+ */
+function Onboarding({initial,onDone,onSkip,canSkip}){
+  const [step,setStep]=useState(0);
+  const [draft,setDraft]=useState({...BLANK_PROFILE,...(initial||{})});
+  const set=(key,value)=>setDraft(d=>({...d,[key]:value}));
+  const preview=computeTargets(draft);
+  const complete=isProfileComplete(draft);
+  const range=expectedWeeklyRange(draft.goal);
+
+  const steps=[
+    {key:"name",title:"Bienvenue",lead:"Comment veux-tu qu'on t'appelle ?",
+      valid:()=>true,
+      body:<Field label="Prénom (facultatif)" value={String(draft.name||"")} onChange={v=>set("name",v)} placeholder="Ton prénom"/>},
+    {key:"who",title:"Toi",lead:"Le métabolisme de base dépend de ces deux valeurs.",
+      valid:()=>Number(draft.age)>=14&&Number(draft.age)<=99,
+      body:<>
+        <Text style={S.label}>Sexe biologique</Text>
+        <View style={S.toggle}>{SEXES.map(o=><Pill key={o.id} active={draft.sex===o.id} onPress={()=>set("sex",o.id)}>{o.label}</Pill>)}</View>
+        <Field label="Âge" value={String(draft.age||"")} onChange={v=>set("age",v)} keyboardType="numeric" placeholder="21"/>
+        <Text style={S.muted}>Utilisé uniquement pour l'équation de Mifflin-St Jeor. Rien ne quitte ton téléphone.</Text>
+      </>},
+    {key:"body",title:"Mesures",lead:"Tes objectifs en découlent directement.",
+      valid:()=>Number(draft.heightCm)>=120&&Number(draft.heightCm)<=230&&Number(draft.weight)>=30&&Number(draft.weight)<=250,
+      body:<>
+        <Field label="Taille (cm)" value={String(draft.heightCm||"")} onChange={v=>set("heightCm",v)} keyboardType="numeric" placeholder="170"/>
+        <Field label="Poids actuel (kg)" value={String(draft.weight||"")} onChange={v=>set("weight",v)} keyboardType="decimal-pad" placeholder="55"/>
+      </>},
+    {key:"activity",title:"Activité",lead:"En dehors de tes séances de musculation.",
+      valid:()=>true,
+      body:<View style={{gap:SP.sm}}>{ACTIVITY_LEVELS.map(o=><Pressable key={o.id} onPress={()=>set("activity",o.id)} style={({pressed})=>[S.choice,draft.activity===o.id&&S.choiceActive,pressed&&S.buttonPressed]}>
+        <View style={{flex:1}}><Text style={S.choiceTitle}>{o.label}</Text><Text style={S.muted}>{o.hint}</Text></View>
+        <View style={[S.radio,draft.activity===o.id&&S.radioOn]}/>
+      </Pressable>)}</View>},
+    {key:"goal",title:"Objectif",lead:"Il fixe l'écart aux calories de maintenance.",
+      valid:()=>true,
+      body:<View style={{gap:SP.sm}}>{GOALS.map(o=><Pressable key={o.id} onPress={()=>set("goal",o.id)} style={({pressed})=>[S.choice,draft.goal===o.id&&S.choiceActive,pressed&&S.buttonPressed]}>
+        <View style={{flex:1}}><Text style={S.choiceTitle}>{o.label}</Text><Text style={S.muted}>{o.adjust>0?"Surplus contrôlé":o.adjust<0?"Déficit modéré":"Calories de maintenance"}</Text></View>
+        <View style={[S.radio,draft.goal===o.id&&S.radioOn]}/>
+      </Pressable>)}</View>},
+    {key:"recap",title:"Tes objectifs",lead:"Calculés à partir de ce que tu viens de renseigner.",
+      valid:()=>complete,
+      body:<>
+        {!complete&&<Text style={S.reason}>Il manque une mesure : reviens en arrière pour compléter.</Text>}
+        <View style={S.recapRow}><Text style={S.recapLabel}>Calories</Text><Text style={S.recapValue}>{preview.calories} kcal</Text></View>
+        <View style={S.recapRow}><Text style={S.recapLabel}>Protéines</Text><Text style={S.recapValue}>{preview.protein} g</Text></View>
+        <View style={S.recapRow}><Text style={S.recapLabel}>Lipides</Text><Text style={S.recapValue}>{preview.fat} g</Text></View>
+        <View style={S.recapRow}><Text style={S.recapLabel}>Pas</Text><Text style={S.recapValue}>{preview.steps}</Text></View>
+        <View style={S.recapRow}><Text style={S.recapLabel}>Rythme visé</Text><Text style={S.recapValue}>{range.low>0?"+":""}{fr(range.low)} à {range.high>0?"+":""}{fr(range.high)} kg/sem</Text></View>
+        <Text style={S.swapTitle}>D'OÙ VIENNENT CES CHIFFRES</Text>
+        {preview.rationale.map((r,i)=><View key={i} style={S.priorityRow}><Text style={S.check}>·</Text><Text style={S.muted}>{r}</Text></View>)}
+        <Text style={S.restFoot}>Tu pourras tout ajuster à la main depuis l'onglet Profil.</Text>
+      </>}
+  ];
+  const current=steps[step],last=step===steps.length-1;
+
+  return <Modal visible transparent={false} animationType="slide" onRequestClose={()=>step>0&&setStep(step-1)}>
+    <SafeAreaView style={S.safe}>
+      <ScrollView contentContainerStyle={S.onbContent} keyboardShouldPersistTaps="handled">
+        <View style={S.onbProgress}>{steps.map((st,i)=><View key={st.key} style={[S.onbDot,i<=step&&S.onbDotOn]}/>)}</View>
+        <Text style={S.eyebrow}>ÉTAPE {step+1} / {steps.length}</Text>
+        <Text style={S.title}>{current.title}</Text>
+        <Text style={S.muted}>{current.lead}</Text>
+        <View style={S.onbBody}>{current.body}</View>
+        <Button title={last?"C'est parti":"Continuer"} onPress={()=>{
+          if(!current.valid()) return Alert.alert("Valeur manquante","Renseigne une valeur réaliste pour continuer.");
+          if(last) return onDone(draft);
+          setStep(step+1);
+        }}/>
+        {step>0&&<Button title="Retour" onPress={()=>setStep(step-1)} secondary/>}
+        {step===0&&canSkip&&<Button title="Garder mes objectifs actuels" onPress={onSkip} secondary/>}
+      </ScrollView>
+    </SafeAreaView>
+  </Modal>;
 }
 
 function ProgramPage({selectedDayKey,setSelectedDayKey,week,setWeek,drafts,onSaveSet,history,onComplete,hardDay,onEmergency,progressionContext,exerciseOverrides,onReplaceExercise}){
@@ -150,9 +231,9 @@ function ProgramPage({selectedDayKey,setSelectedDayKey,week,setWeek,drafts,onSav
 }
 
 function Home({app}){
-const {phase,remaining,total,targets,stepValue,coach,coachLoading,analyze,autopilotActions,generateWeek,setTab,health,quality,jjb,gym,todayWorkout,water,waterTarget,setWaterAmount,addWater,caffeine,setCaffeine,recovery,dayStreak,setStepCount}=app;
+const {phase,remaining,total,targets,stepValue,coach,coachLoading,analyze,autopilotActions,generateWeek,setTab,health,quality,jjb,gym,todayWorkout,water,waterTarget,setWaterAmount,addWater,caffeine,setCaffeine,recovery,dayStreak,setStepCount,profile}=app;
 return <ScrollView key="home" contentContainerStyle={S.content}>
-  <View style={S.header}><View><Text style={S.eyebrow}>YPROGRESS • COACH OS</Text><Text style={S.title}>Salut Yacine 👋</Text><Text style={S.muted}>Ton coach décide avec toi.</Text></View><View style={S.avatar}><Text style={S.avatarText}>Y</Text></View></View>
+  <View style={S.header}><View><Text style={S.eyebrow}>YPROGRESS • COACH OS</Text><Text style={S.title}>{profile?.name?`Salut ${profile.name} 👋`:"Salut 👋"}</Text><Text style={S.muted}>Ton coach décide avec toi.</Text></View><View style={S.avatar}><Text style={S.avatarText}>{(profile?.name||"Y").trim().charAt(0).toUpperCase()}</Text></View></View>
   <View style={S.phase}><Text style={S.phaseIcon}>{phase.icon}</Text><View style={{flex:1}}><Text style={S.phaseTitle}>{phase.title}</Text><Text style={S.phaseSub}>{phase.sub}</Text></View>{dayStreak>0?<View style={S.streakBadge}><Text style={S.streakValue}>{dayStreak}</Text><Text style={S.streakLabel}>JOURS</Text></View>:<Text style={S.arrow}>›</Text>}</View>
   <Card style={S.hero}><View><Text style={S.eyebrow}>RESTE À MANGER</Text><Text style={S.heroNum}>{remaining}</Text><Text style={S.muted}>kcal • cible dynamique</Text></View><View style={S.glow}><Text style={{fontSize:32}}>🔥</Text></View></Card>
   <View style={S.metrics}><Metric emoji="🔥" label="Calories" value={Math.round(total.calories)} target={targets.calories}/><Metric emoji="🥩" label="Protéines" value={Math.round(total.protein)} target={targets.protein} display={targets.protein+" g"}/><Metric emoji="🚶" label="Pas" value={stepValue} target={targets.steps} display={targets.steps>=1000?`${Math.round(targets.steps/100)/10}k`:targets.steps}/></View>
@@ -190,8 +271,8 @@ return <ScrollView key="progress" contentContainerStyle={S.content}><Text style=
   <Card><Text style={S.section}>😴 Sommeil</Text><Field label="Coucher" value={sleep} onChange={setSleep}/><Field label="Réveil" value={wake} onChange={setWake}/><Field label="Qualité 1–5" value={quality} onChange={setQuality} keyboardType="numeric"/><Button title="Enregistrer" onPress={saveSleep}/></Card>
   <Card style={plateau.detected?S.alertCard:null}><View style={S.cardHead}><Text style={S.section}>⚠️ Détection de plateau</Text><Text style={S.ai}>{plateau.reason?"EN ATTENTE":plateau.detected?"PLATEAU":"OK"}</Text></View>
     {plateau.reason?<Text style={S.text}>Il faut au moins 14 jours de pesées pour conclure. Tu en as {weightSeries(journal).length}.</Text>
-      :plateau.detected?<><Text style={S.text}>Ton poids moyen stagne ({plateau.deltaKgPerWeek>=0?"+":""}{plateau.deltaKgPerWeek.toFixed(2)} kg/semaine).</Text><Text style={S.reason}>Adaptation proposée : +{plateau.suggestedCalories} kcal par jour, à tenir une semaine avant de réévaluer.</Text></>
-      :<Text style={S.text}>Progression normale : {plateau.deltaKgPerWeek>=0?"+":""}{plateau.deltaKgPerWeek.toFixed(2)} kg/semaine. Aucune adaptation nécessaire.</Text>}
+      :plateau.detected?<><Text style={S.text}>Ton poids moyen stagne ({plateau.deltaKgPerWeek>=0?"+":""}{fr(plateau.deltaKgPerWeek.toFixed(2))} kg/semaine).</Text><Text style={S.reason}>Adaptation proposée : +{plateau.suggestedCalories} kcal par jour, à tenir une semaine avant de réévaluer.</Text></>
+      :<Text style={S.text}>Progression normale : {plateau.deltaKgPerWeek>=0?"+":""}{fr(plateau.deltaKgPerWeek.toFixed(2))} kg/semaine. Aucune adaptation nécessaire.</Text>}
   </Card>
   <Card><View style={S.cardHead}><Text style={S.section}>😴 Dette de sommeil</Text><Text style={S.ai}>{sleepAdvice.urgency==="high"?"URGENT":"OK"}</Text></View><Text style={S.text}>{sleepAdvice.message}</Text><Text style={S.muted}>Objectif calculé : {Math.floor(sleepAdvice.desiredSleepMin/60)}h{String(sleepAdvice.desiredSleepMin%60).padStart(2,"0")} • {journal.filter(hasSleep).length} nuit(s) enregistrée(s).</Text></Card>
   <Card><View style={S.cardHead}><Text style={S.section}>🏆 Score de la semaine</Text><Text style={S.ai}>{weekly.sampleDays?`${weekly.sampleDays} J`:"—"}</Text></View><Text style={S.score}>{weekly.score || "—"}<Text style={S.kg}>/100</Text></Text>
@@ -199,31 +280,35 @@ return <ScrollView key="progress" contentContainerStyle={S.content}><Text style=
     <Text style={S.text}>Protéines moyennes : {weekly.avgProtein||"—"} g</Text>
     <Text style={S.text}>Pas moyens : {weekly.avgSteps||"—"}</Text>
     <Text style={S.text}>Sommeil moyen : {weekly.avgSleepMin?`${Math.floor(weekly.avgSleepMin/60)}h${String(weekly.avgSleepMin%60).padStart(2,"0")}`:"—"}</Text>
-    <Text style={S.text}>Variation de poids : {weekly.weightChange>0?"+":""}{weekly.weightChange||0} kg</Text>
+    <Text style={S.text}>Variation de poids : {weekly.weightChange>0?"+":""}{fr(weekly.weightChange||0)} kg</Text>
     <Text style={S.muted}>Moyenne réelle sur les 7 dernières journées enregistrées.</Text>
     <Button title="Calculer mon bilan" onPress={weeklyAnalysis}/></Card>
   <Card><Text style={S.section}>📸 Timeline physique</Text><Text style={S.muted}>Semaine 1 → 4 → 8 → 12 → 16 → 20 → 24. Comparaison de photos dans la build native.</Text></Card>
 </ScrollView>}
 
 function Profile({app}){
-const {targets,dynamicCarbs,notifications,scheduleNotifications,saveTargets,recovery}=app;
+const {targets,dynamicCarbs,notifications,scheduleNotifications,saveTargets,recovery,profile,openOnboarding}=app;
+const computed=profile?computeTargets(profile):null;
+const goalLabelFor=id=>(GOALS.find(g=>g.id===id)||GOALS[0]).label;
+const activityLabel=profile?(ACTIVITY_LEVELS.find(a=>a.id===profile.activity)||ACTIVITY_LEVELS[1]).label:"";
 const [draft,setDraft]=useState(null);
 const editing=draft!==null;
 const field=key=>String(draft?.[key]??"");
 function openEditor(){setDraft({...targets})}
 async function saveProfile(){await saveTargets(draft);setDraft(null);Alert.alert("Profil enregistré","Tes objectifs sont sauvegardés et servent maintenant de base au coach.")}
-const goalLabel=(GOALS.find(g=>g.id===targets.goal)||GOALS[0]).label;
+const goalLabel=profile?goalLabelFor(profile.goal):"Objectifs manuels";
 return <ScrollView key="profile" contentContainerStyle={S.content} keyboardShouldPersistTaps="handled"><Text style={S.title}>⚙️ Profil</Text>
   <Card><View style={S.cardHead}><Text style={S.section}>Tes bases</Text><Text style={S.ai}>{goalLabel.toUpperCase()}</Text></View>
-    <Text style={S.text}>{(Number(targets.heightCm)/100).toFixed(2).replace(".",",")} m • {targets.weight} kg</Text>
+    {profile
+      ? <><Text style={S.text}>{(profile.heightCm/100).toFixed(2).replace(".",",")} m • {profile.weight} kg • {profile.age} ans</Text>
+          <Text style={S.muted}>{activityLabel} • objectif {goalLabel.toLowerCase()}</Text></>
+      : <Text style={S.muted}>Profil non renseigné : tes objectifs ne sont pas encore calculés à partir de tes mesures.</Text>}
     <Text style={S.muted}>{targets.calories} kcal • {targets.protein} g protéines • {targets.fat} g lipides • ~{dynamicCarbs} g glucides</Text>
     <Text style={S.muted}>{targets.steps} pas • {Math.floor(targets.sleepMin/60)}h{String(targets.sleepMin%60).padStart(2,"0")} de sommeil visés</Text>
-    {!editing&&<Button title="Modifier mes objectifs" onPress={openEditor} secondary/>}
+    {!editing&&<Button title={profile?"Mettre à jour mes mesures":"Calculer mes objectifs"} onPress={openOnboarding}/>}
+    {!editing&&<Button title="Ajuster les chiffres à la main" onPress={openEditor} secondary/>}
     {editing&&<View style={S.editBlock}>
-      <Text style={S.swapTitle}>OBJECTIF</Text>
-      <View style={S.toggle}>{GOALS.map(g=><Pill key={g.id} active={draft.goal===g.id} onPress={()=>setDraft({...draft,goal:g.id})}>{g.label}</Pill>)}</View>
-      <Field label="Taille (cm)" value={field("heightCm")} onChange={v=>setDraft({...draft,heightCm:v})} keyboardType="numeric"/>
-      <Field label="Poids de référence (kg)" value={field("weight")} onChange={v=>setDraft({...draft,weight:v})} keyboardType="decimal-pad"/>
+      <Text style={S.muted}>Ces valeurs remplacent le calcul automatique jusqu'à ta prochaine mise à jour de mesures.</Text>
       <Field label="Calories par jour" value={field("calories")} onChange={v=>setDraft({...draft,calories:v})} keyboardType="numeric"/>
       <Field label="Protéines par jour (g)" value={field("protein")} onChange={v=>setDraft({...draft,protein:v})} keyboardType="numeric"/>
       <Field label="Lipides par jour (g)" value={field("fat")} onChange={v=>setDraft({...draft,fat:v})} keyboardType="numeric"/>
@@ -233,6 +318,12 @@ return <ScrollView key="profile" contentContainerStyle={S.content} keyboardShoul
       <Button title="Annuler" onPress={()=>setDraft(null)} secondary/>
     </View>}
   </Card>
+  {computed&&computed.bmr>0&&<Card><Text style={S.section}>🧮 D'où viennent tes objectifs</Text>
+    <View style={S.recapRow}><Text style={S.recapLabel}>Métabolisme de base</Text><Text style={S.recapValue}>{computed.bmr} kcal</Text></View>
+    <View style={S.recapRow}><Text style={S.recapLabel}>Maintenance estimée</Text><Text style={S.recapValue}>{computed.maintenance} kcal</Text></View>
+    {computed.rationale.map((r,i)=><View key={i} style={S.priorityRow}><Text style={S.check}>·</Text><Text style={S.muted}>{r}</Text></View>)}
+    {targets.calories!==computed.calories&&<Text style={S.restFoot}>Tes objectifs sont ajustés à la main ({targets.calories} kcal au lieu de {computed.calories} kcal calculées).</Text>}
+  </Card>}
   <Card><View style={S.cardHead}><Text style={S.section}>🔋 Récupération actuelle</Text><Text style={S.ai}>{recovery}/100</Text></View><Progress value={recovery} target={100}/><Text style={S.muted}>Calculée à partir du sommeil, de la nutrition, de l'hydratation et des séances.</Text></Card>
   <Card><View style={S.switchLine}><View><Text style={S.section}>🔔 Notifications intelligentes</Text><Text style={S.muted}>Repas • entraînement • sommeil</Text></View><Switch value={notifications} onValueChange={scheduleNotifications} trackColor={{false:P.surfaceHigh,true:P.limeDeep}} thumbColor={notifications?P.lime:P.inkMuted} ios_backgroundColor={P.surfaceHigh}/></View></Card>
   <Card><View style={S.cardHead}><Text style={S.section}>❤️ Apple Santé</Text><Text style={S.ai}>{FEATURES.healthKit?"ACTIF":"HORS LIGNE"}</Text></View><Text style={S.text}>Pas • sommeil • poids • énergie active</Text><Text style={S.muted}>{FEATURES.healthKit?"Les données confirmées par HealthKit sont prioritaires sur les estimations.":"HealthKit s'active dans une development build iOS. En attendant, saisis tes pas et ton sommeil à la main : rien n'est inventé."}</Text></Card>
@@ -258,6 +349,7 @@ export default function App(){
   const [foodDraft,setFoodDraft]=useState({name:"",calories:"",protein:"",carbs:"",fat:""});
   const [groceryList,setGroceryList]=useState(null),[exerciseOverrides,setExerciseOverrides]=useState({});
   const [journal,setJournal]=useState([]),[ready,setReady]=useState(false);
+  const [profile,setProfile]=useState(null),[onboarding,setOnboarding]=useState(false);
   const journalRef=useRef([]);
 
   useEffect(()=>{(async()=>{
@@ -266,6 +358,11 @@ export default function App(){
     setLogs((Array.isArray(all)?all:[]).filter(x=>x.date===iso()));
     const savedWeights=await store.get(KEYS.weights,[]);setWeights(Array.isArray(savedWeights)?savedWeights:[]);
     const t=await store.get(KEYS.targets,null);if(t&&typeof t==="object")setTargets({...BASE,...t});
+    // Pas de profil enregistré : on propose le parcours d'accueil.
+    // Un utilisateur qui avait déjà des objectifs peut le refuser sans les perdre.
+    const savedProfile=await store.get(KEYS.profile,null);
+    if(savedProfile&&typeof savedProfile==="object") setProfile(savedProfile);
+    else setOnboarding(true);
     const w=await store.get(KEYS.weekly,null);if(w&&typeof w==="object")setWeekly(w);
     const wd=await store.get(KEYS.workoutLogs,{});setWorkoutLogs(wd&&typeof wd==="object"?wd:{});
     const th=await store.get(KEYS.trainingHistory,[]);setTrainingHistory(Array.isArray(th)?th:[]);
@@ -430,6 +527,29 @@ export default function App(){
   }
   async function changeTrainingWeek(week){const value=Math.max(1,Math.round(Number(week)||1));setTrainingWeek(value);await store.set(KEYS.trainingWeek,value);}
   async function replaceExercise(slotId,exercise){const next={...exerciseOverrides};if(exercise)next[slotId]=exercise;else delete next[slotId];setExerciseOverrides(next);await store.set(KEYS.exerciseOverrides,next);}
+  /** Enregistre le profil et en dérive les objectifs journaliers. */
+  async function saveProfile(next){
+    const clean={
+      name:String(next.name||"").trim().slice(0,40),
+      sex:SEXES.some(o=>o.id===next.sex)?next.sex:"unspecified",
+      age:clamp(Math.round(Number(next.age)||0),14,99),
+      heightCm:clamp(Math.round(Number(next.heightCm)||0),120,230),
+      weight:clamp(Number(next.weight)||0,30,250),
+      activity:ACTIVITY_LEVELS.some(o=>o.id===next.activity)?next.activity:"moderate",
+      goal:GOALS.some(o=>o.id===next.goal)?next.goal:"lean_gain",
+      sleepMin:clamp(Math.round(Number(next.sleepMin)||450),300,660)
+    };
+    setProfile(clean);
+    await store.set(KEYS.profile,clean);
+    const computed=computeTargets(clean);
+    const derived={calories:computed.calories,protein:computed.protein,fat:computed.fat,steps:computed.steps,sleepMin:computed.sleepMin};
+    setTargets(derived);
+    await store.set(KEYS.targets,derived);
+    if(clean.weight>0){setWeight(String(clean.weight));await recordToday({weight:clean.weight});}
+    setOnboarding(false);
+    return computed;
+  }
+
   async function saveTargets(patch){
     const next={...targets,...patch};
     const clean={
@@ -437,10 +557,7 @@ export default function App(){
       protein:clamp(Math.round(Number(next.protein)||BASE.protein),40,300),
       fat:clamp(Math.round(Number(next.fat)||BASE.fat),30,200),
       steps:clamp(Math.round(Number(next.steps)||BASE.steps),2000,40000),
-      sleepMin:clamp(Math.round(Number(next.sleepMin)||BASE.sleepMin),300,660),
-      weight:Number(next.weight)||BASE.weight,
-      heightCm:clamp(Math.round(Number(next.heightCm)||BASE.heightCm),120,230),
-      goal:typeof next.goal==="string"?next.goal:BASE.goal
+      sleepMin:clamp(Math.round(Number(next.sleepMin)||BASE.sleepMin),300,660)
     };
     setTargets(clean);
     await store.set(KEYS.targets,clean);
@@ -454,7 +571,8 @@ export default function App(){
   const app={phase,remaining,total,targets,stepValue,coach,coachLoading,analyze,autopilotActions,generateWeek,setTab,health,quality,jjb,gym,todayWorkout,water,waterTarget,setWaterAmount,addWater,caffeine,setCaffeine,recovery,dayStreak,
     foodDraft,setFoodDraft,restaurantChoice,photoMeal,photo,setPhoto,restaurantMode,pRemain,budget,setBudget,generateGroceries,groceryList,dynamicCarbs,addLog,
     currentWeight,weight,setWeight,saveWeight,sleep,setSleep,wake,setWake,setQuality,saveSleep,weekly,weeklyAnalysis,plateau,sleepAdvice,journal,
-    notifications,scheduleNotifications,saveTargets,setStepCount,ready};
+    notifications,scheduleNotifications,saveTargets,setStepCount,ready,
+    profile,saveProfile,openOnboarding:()=>setOnboarding(true)};
   const pages={
     home:<Home app={app}/>,
     nutrition:<Nutrition app={app}/>,
@@ -462,6 +580,7 @@ export default function App(){
     progress:<ProgressPage app={app}/>,
     profile:<Profile app={app}/>
   };
+  if(ready&&onboarding) return <><StatusBar style="light"/><Onboarding initial={profile} canSkip={Boolean(targets&&targets.calories)} onSkip={()=>setOnboarding(false)} onDone={async d=>{const c=await saveProfile(d);Alert.alert("Profil enregistré",`Objectif : ${c.calories} kcal et ${c.protein} g de protéines par jour.`)}}/></>;
   return <SafeAreaView style={S.safe}><StatusBar style="light"/>{pages[tab]}<View style={S.navWrap} pointerEvents="box-none"><View style={S.bottom}>{[["home","🏠","Accueil"],["nutrition","🍽️","Nutrition"],["program","🏋️","Programme"],["progress","📈","Progrès"],["profile","⚙️","Profil"]].map(([id,ic,l])=><Pressable accessibilityRole="tab" accessibilityState={{selected:tab===id}} key={id} onPress={()=>setTab(id)} style={({pressed})=>[S.nav,tab===id&&S.navActive,pressed&&S.buttonPressed]}><Text style={[S.navIcon,tab===id&&S.navIconActive]}>{ic}</Text><Text style={[S.navText,tab===id&&S.navTextActive]} numberOfLines={1}>{l}</Text></Pressable>)}</View></View></SafeAreaView>
 }
 
@@ -646,6 +765,21 @@ const S=StyleSheet.create({
   chartAxis:{flexDirection:"row",justifyContent:"space-between",gap:SP.sm,marginBottom:SP.sm},
   chartAxisText:{...T.label,fontSize:9,color:P.inkFaint,textTransform:"none",letterSpacing:.3},
   score:{...T.dataXl,color:P.lime,lineHeight:58},
+
+  // ---------- Première utilisation ----------
+  onbContent:{width:"100%",maxWidth:LAYOUT.maxContentWidth,alignSelf:"center",paddingHorizontal:SP.lg,paddingTop:SP.xxl,paddingBottom:SP.xxxl,minHeight:"100%"},
+  onbProgress:{flexDirection:"row",gap:SP.xs,marginBottom:SP.xl},
+  onbDot:{flex:1,height:4,borderRadius:RD.pill,backgroundColor:P.surfaceHigh},
+  onbDotOn:{backgroundColor:P.lime},
+  onbBody:{marginTop:SP.xl,marginBottom:SP.lg},
+  choice:{flexDirection:"row",alignItems:"center",gap:SP.md,minHeight:LAYOUT.tapTarget+14,padding:SP.md,borderRadius:RD.lg,backgroundColor:P.surface,borderWidth:1,borderColor:P.line},
+  choiceActive:{backgroundColor:P.limeDark,borderColor:P.lime},
+  choiceTitle:{...T.section,fontSize:15,color:P.ink},
+  radio:{width:22,height:22,borderRadius:RD.pill,borderWidth:2,borderColor:P.lineStrong},
+  radioOn:{borderColor:P.lime,backgroundColor:P.lime},
+  recapRow:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",gap:SP.md,paddingVertical:SP.md,borderBottomWidth:1,borderBottomColor:P.line},
+  recapLabel:{...T.label,fontSize:10,color:P.inkMuted},
+  recapValue:{fontFamily:F.cond,fontSize:21,fontWeight:"700",color:P.lime},
 
   // ---------- Navigation ----------
   // navWrap porte le positionnement absolu ; la barre reste centrée et bornée sur grand écran.

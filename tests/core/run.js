@@ -67,4 +67,22 @@ results.push(test("sleep debt ignores nights without data",()=>{let h=history.up
 results.push(test("weight-only days do not inflate the weekly sample",()=>{let h=[];for(let i=1;i<=7;i++)h=history.upsertDay(h,{date:`2026-09-0${i}`,weight:55});const s=history.weeklySummary(h,{calories:2500});assert.equal(s.sampleDays,0);assert.equal(s.avgSleepMin,0)}));
 results.push(test("streak ignores weight-only days",()=>{let h=history.upsertDay([],{date:"2026-09-11",weight:55});assert.equal(history.streak(h,"2026-09-11"),0)}));
 
+const profile=require("../../src/core/profile.js");
+const YACINE={weight:55,heightCm:170,age:21,sex:"male",activity:"moderate",goal:"lean_gain"};
+results.push(test("Mifflin-St Jeor matches the reference formula",()=>{assert.equal(profile.basalMetabolicRate({weightKg:55,heightCm:170,age:21,sex:"male"}),Math.round(10*55+6.25*170-5*21+5))}));
+results.push(test("BMR is zero when measurements are missing",()=>{assert.equal(profile.basalMetabolicRate({weightKg:55}),0);assert.equal(profile.basalMetabolicRate({}),0)}));
+results.push(test("incomplete profile never claims computed targets",()=>{const t=profile.computeTargets({});assert.equal(t.bmr,0);assert(t.rationale[0].includes("incomplet"))}));
+results.push(test("profile completeness requires every measurement",()=>{assert.equal(profile.isProfileComplete(YACINE),true);assert.equal(profile.isProfileComplete({...YACINE,age:0}),false);assert.equal(profile.isProfileComplete({...YACINE,sex:undefined}),false)}));
+results.push(test("lean gain sits above maintenance",()=>{const t=profile.computeTargets(YACINE);assert(t.calories>t.maintenance);assert(t.calories-t.maintenance<=profile.SAFETY.maxSurplusKcal)}));
+results.push(test("surplus is capped at 400 kcal",()=>{const t=profile.computeTargets({weight:135,heightCm:200,age:20,sex:"male",activity:"high",goal:"lean_gain"});assert(t.calories-t.maintenance<=400);assert.equal(t.capped,true)}));
+results.push(test("deficit is capped at 500 kcal",()=>{const t=profile.computeTargets({weight:120,heightCm:195,age:25,sex:"male",activity:"high",goal:"cut"});assert(t.maintenance-t.calories<=500)}));
+results.push(test("calories never drop below the safety floor",()=>{for(const p of [{weight:42,heightCm:150,age:60,sex:"female",activity:"sedentary",goal:"cut"},{weight:38,heightCm:145,age:70,sex:"female",activity:"sedentary",goal:"cut"}]){const t=profile.computeTargets(p);assert(t.calories>=profile.SAFETY.minCalories,`${t.calories} sous le plancher`);assert(t.calories>=Math.round(t.bmr*1.1)-5)}}));
+results.push(test("protein never exceeds 2.6 g per kilo",()=>{for(const goal of ["lean_gain","recomp","cut","maintain"]){const t=profile.computeTargets({...YACINE,goal});assert(t.protein/55<=profile.SAFETY.maxProteinPerKg)}}));
+results.push(test("fat never drops below the hormonal floor",()=>{for(const p of [{...YACINE,goal:"cut"},{weight:45,heightCm:155,age:30,sex:"female",activity:"sedentary",goal:"cut"}]){const t=profile.computeTargets(p);assert(t.fat>=profile.SAFETY.minFatGrams)}}));
+results.push(test("macros always fit inside the calorie budget",()=>{for(const goal of ["lean_gain","recomp","cut","maintain"])for(const act of ["sedentary","light","moderate","high"]){const t=profile.computeTargets({...YACINE,goal,activity:act});assert(t.protein*4+t.fat*9<=t.calories,`${goal}/${act}: macros dépassent ${t.calories} kcal`)}}));
+results.push(test("every target is explained",()=>{const t=profile.computeTargets(YACINE);assert(t.rationale.length>=3);assert(t.rationale.some(r=>r.includes("Métabolisme")))}));
+results.push(test("more activity means more calories and steps",()=>{const low=profile.computeTargets({...YACINE,activity:"sedentary"}),high=profile.computeTargets({...YACINE,activity:"high"});assert(high.calories>low.calories);assert(high.steps>low.steps)}));
+results.push(test("unspecified sex stays between male and female",()=>{const base={weightKg:60,heightCm:170,age:30};const m=profile.basalMetabolicRate({...base,sex:"male"}),f=profile.basalMetabolicRate({...base,sex:"female"}),u=profile.basalMetabolicRate({...base,sex:"unspecified"});assert(u<m&&u>f)}));
+results.push(test("expected weekly range matches the goal direction",()=>{assert(profile.expectedWeeklyRange("lean_gain").low>0);assert(profile.expectedWeeklyRange("cut").high<0);assert.equal(profile.expectedWeeklyRange("maintain").low<0,true)}));
+
 process.exit(results.every(Boolean)?0:1);

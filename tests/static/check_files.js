@@ -2,7 +2,7 @@ const fs=require("fs"),path=require("path"),assert=require("assert");
 const root=path.resolve(__dirname,"../..");
 const required=[
 "App.js","package.json","app.json","src/core/autopilot.js","src/core/featureFlags.js",
-"src/core/progression.js","src/core/groceryPlanner.js","src/core/history.js","src/features/training/program.js",
+"src/core/progression.js","src/core/groceryPlanner.js","src/core/history.js","src/core/profile.js","src/features/training/program.js",
 "src/core/intelligence.js","src/design/theme.js","src/pwa.js","public/index.html","public/sw.js","public/manifest.webmanifest",
 "src/domain/model.js","src/types/contracts.js","src/services/health/sleepAutoDetection.js",
 "src/services/storage/store.js","src/services/storage/memory.js","src/services/storage/privacy.js",
@@ -38,6 +38,11 @@ const themeSource=fs.readFileSync(path.join(root,"src/design/theme.js"),"utf8");
 // La direction artistique abandonne le violet : garde-fou explicite.
 for(const banned of ["#39205f","#102d66","#392070","#9175ff","#b77cff"]) assert(!themeSource.includes(banned)&&!appSource.includes(banned),`legacy purple ${banned} must be gone`);
 assert(/minHeight:\s*LAYOUT\.tapTarget/.test(appSource),"interactive rows must respect the 46px tap target");
+
+// Onboarding : les objectifs doivent venir du profil, plus de constantes personnelles.
+assert(appSource.includes("computeTargets"),"App.js must derive targets from the profile");
+assert(!appSource.includes("Salut Yacine"),"the greeting must come from the saved profile");
+for(const wired of ["isProfileComplete","ACTIVITY_LEVELS","Onboarding"]) assert(appSource.includes(wired),`${wired} must be wired into App.js`);
 
 // PWA : sans le lien manifest, l'app n'est pas installable sur iPhone.
 const indexHtml=fs.readFileSync(path.join(root,"public/index.html"),"utf8");
