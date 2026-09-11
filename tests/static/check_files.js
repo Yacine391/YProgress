@@ -48,6 +48,19 @@ assert(themeSource.includes("backdropFilter"),"glass surfaces need a real backdr
 const emojiIcon=/(?:navIcon|<Text style=\{S\.section\}>)\s*[^<]*[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
 assert(!emojiIcon.test(appSource),"section and nav icons must be vector, not emoji");
 assert(appSource.includes('from "./src/design/icons"'),"App.js must use the vector icon set");
+// Un token supprimé du thème laisse une référence silencieuse à `undefined` :
+// la couleur disparaît sans erreur. On vérifie donc que chaque token existe.
+const tokenGroup=(name)=>{
+  const m=themeSource.match(new RegExp(`export const ${name} = \\{([\\s\\S]*?)\\n\\};`));
+  return new Set(m?[...m[1].matchAll(/^\s{2}([A-Za-z0-9_]+):/gm)].map(x=>x[1]):[]);
+};
+const groups={P:tokenGroup("palette"),GL:tokenGroup("glass"),GR:tokenGroup("gradient")};
+for(const [prefix,valid] of Object.entries(groups)){
+  assert(valid.size>0,`theme group for ${prefix} not found`);
+  for(const m of appSource.matchAll(new RegExp(`\\b${prefix}\\.([A-Za-z0-9_]+)`,"g"))){
+    assert(valid.has(m[1]),`${prefix}.${m[1]} is referenced in App.js but missing from the theme`);
+  }
+}
 assert(/minHeight:\s*LAYOUT\.tapTarget/.test(appSource),"interactive rows must respect the 46px tap target");
 
 // Onboarding : les objectifs doivent venir du profil, plus de constantes personnelles.

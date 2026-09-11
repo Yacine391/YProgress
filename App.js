@@ -21,6 +21,13 @@ import {Icon} from "./src/design/icons";
 
 const BASE={calories:2500,protein:110,fat:70,steps:10000,sleepMin:450};
 // Application personnelle : le profil est pré-rempli, modifiable depuis l'onglet Profil.
+const REMINDERS=[
+  [8,0,"YProgress","Petit-déjeuner + protéines"],
+  [13,0,"YProgress","Enregistre ton déjeuner"],
+  [16,30,"YProgress","Vérifie tes protéines"],
+  [19,0,"YProgress","Prépare ton entraînement"],
+  [22,30,"YProgress","Protège ton sommeil"]
+];
 const MY_PROFILE={name:"Yacine",sex:"male",age:21,heightCm:170,weight:55,activity:"moderate",goal:"lean_gain",sleepMin:450};
 const AI_BASE_URL=(process.env.EXPO_PUBLIC_AI_BASE_URL||"").replace(/\/$/,"");
 const fr=n=>String(n).replace(".",",");
@@ -46,6 +53,31 @@ function Head({icon,color,children,right}){
   return <View style={S.cardHead}>
     <View style={S.headLeft}><Icon name={icon} size={18} color={color||P.inkSoft}/><Text style={S.section}>{children}</Text></View>
     {right}
+  </View>;
+}
+
+/**
+ * Bandeau de retour. notify() est une fonction vide dans react-native-web :
+ * sur la PWA, aucune confirmation ni aucun avertissement n'apparaissait jamais.
+ */
+function Toast({data,onHide}){
+  useEffect(()=>{
+    if(!data)return;
+    const id=setTimeout(onHide,data.tone==="error"?5200:3400);
+    return ()=>clearTimeout(id);
+  },[data,onHide]);
+  if(!data)return null;
+  const tint=data.tone==="error"?GR.clay:data.tone==="warn"?GR.amber:GR.cta;
+  return <View style={S.toastWrap} pointerEvents="box-none">
+    <Pressable accessibilityRole="alert" onPress={onHide} style={S.toast}>
+      <LinearGradient colors={tint} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill} pointerEvents="none"/>
+      <LinearGradient colors={GR.sheen} locations={[0,.5,1]} start={{x:0,y:0}} end={{x:0,y:1}} style={S.cardSheen} pointerEvents="none"/>
+      <Icon name={data.tone==="error"?"alert":"check"} size={18} color={P.ink}/>
+      <View style={{flex:1}}>
+        <Text style={S.toastTitle}>{data.title}</Text>
+        {data.body?<Text style={S.toastBody}>{data.body}</Text>:null}
+      </View>
+    </Pressable>
   </View>;
 }
 
@@ -89,15 +121,17 @@ function Progress({value,target,colors,showPct}){
     {showPct&&<Text style={S.pct}>{Math.round(p*100)}%</Text>}
   </View>;
 }
-function Metric({icon,iconColor,label,value,target,display,tint,bar,ratioValue,ratioTarget}){return <View style={S.metric}>
+function Metric({icon,iconColor,label,value,target,display,tint,bar,ratioValue,ratioTarget,orb,note}){return <View style={S.metric}>
   <LinearGradient colors={tint||GR.glass} start={{x:.1,y:0}} end={{x:.9,y:1}} style={StyleSheet.absoluteFill} pointerEvents="none"/>
   <LinearGradient colors={GR.sheen} locations={[0,.5,1]} start={{x:0,y:0}} end={{x:0,y:1}} style={S.cardSheen} pointerEvents="none"/>
+  <Orb size={44} colors={orb||GR.blob} style={S.metricOrb}/>
   <View style={S.metricBody}>
     <View style={S.metricHead}><Icon name={icon} size={17} color={iconColor||P.inkSoft}/><Text style={S.metricLabel} numberOfLines={1}>{label}</Text></View>
     <View style={S.metricLine}>
       <Text style={S.metricValue} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
       <Text style={S.metricTarget} numberOfLines={1}>/ {display??target}</Text>
     </View>
+    {note?<Text style={S.metricNote}>{note}</Text>:null}
     <Progress value={ratioValue!==undefined?ratioValue:value} target={ratioTarget!==undefined?ratioTarget:target} colors={bar} showPct/>
   </View>
 </View>}
@@ -124,7 +158,7 @@ function WeightChart({series=[],max=14}){
   </View>;
 }
 
-function Pill({children,active,onPress}){return <Pressable accessibilityRole="button" accessibilityState={{selected:!!active}} onPress={onPress} style={({pressed})=>[S.pill,active&&S.pillActive,pressed&&S.buttonPressed]}><Text style={[S.pillText,active&&{color:P.lime}]}>{children}</Text></Pressable>}
+function Pill({children,active,onPress}){return <Pressable accessibilityRole="button" accessibilityState={{selected:!!active}} onPress={onPress} style={({pressed})=>[S.pill,active&&S.pillActive,pressed&&S.buttonPressed]}><Text style={[S.pillText,active&&{color:P.violetSoft}]}>{children}</Text></Pressable>}
 
 function ExerciseVideoModal({exercise,onClose}){
   const video=exercise?.video;
@@ -201,7 +235,7 @@ function ProgramPage({selectedDayKey,setSelectedDayKey,week,setWeek,drafts,onSav
 }
 
 function Home({app}){
-const {phase,remaining,total,targets,stepValue,coach,coachLoading,analyze,autopilotActions,generateWeek,setTab,health,quality,jjb,gym,todayWorkout,water,waterTarget,setWaterAmount,addWater,caffeine,setCaffeine,recovery,dayStreak,setStepCount,profile,coachStatus,coachSource}=app;
+const {phase,remaining,total,targets,stepValue,coach,coachLoading,analyze,autopilotActions,generateWeek,setTab,health,quality,jjb,gym,todayWorkout,water,waterTarget,setWaterAmount,addWater,caffeine,setCaffeine,recovery,dayStreak,setStepCount,profile,coachStatus,coachSource,notify}=app;
 // On dit la vérité sur l'origine du conseil : IA réelle ou repli local.
 const coachStatusLabel=
   coachSource==="ai" ? `Réponse du coach IA • ${coachStatus.model||"modèle gratuit"}`
@@ -213,19 +247,32 @@ const coachStatusLabel=
   : coachStatus.state==="offline" ? "Serveur IA injoignable : mode local."
   : "Vérification de la configuration…";
 return <ScrollView key="home" contentContainerStyle={S.content}>
-  <View style={S.header}><View><Text style={S.eyebrow}>YPROGRESS • COACH OS</Text><Text style={S.title}>{profile?.name?`Salut ${profile.name} 👋`:"Salut 👋"}</Text><Text style={S.muted}>Ton coach décide avec toi.</Text></View><View style={S.avatar}><Text style={S.avatarText}>{(profile?.name||"Y").trim().charAt(0).toUpperCase()}</Text></View></View>
-  <View style={S.phase}><Text style={S.phaseIcon}>{phase.icon}</Text><View style={{flex:1}}><Text style={S.phaseTitle}>{phase.title}</Text><Text style={S.phaseSub}>{phase.sub}</Text></View>{dayStreak>0?<View style={S.streakBadge}><Text style={S.streakValue}>{dayStreak}</Text><Text style={S.streakLabel}>JOURS</Text></View>:<Text style={S.arrow}>›</Text>}</View>
+  <View style={S.header}>
+      <View style={{flex:1}}>
+        <Text style={S.title}>{profile?.name?`Bonjour ${profile.name} 👋`:"Bonjour 👋"}</Text>
+        <Text style={S.muted}>Prêt à devenir ta meilleure version ?</Text>
+      </View>
+      <Pressable accessibilityRole="button" accessibilityLabel="Notifications" onPress={()=>setTab("profile")} style={({pressed})=>[S.bellButton,pressed&&S.buttonPressed]}>
+        <Icon name="bell" size={20} color={P.inkSoft}/>
+        {autopilotActions.length>0&&<View style={S.bellDot}/>}
+      </Pressable>
+    </View>
   <Card glow tint={GR.calories} bodyStyle={S.hero}>
-      <View style={{flex:1}}><Text style={S.eyebrow}>RESTE À MANGER</Text><Text style={S.heroNum}>{remaining}</Text><Text style={S.muted}>kcal • cible dynamique</Text>
-        <Progress value={total.calories} target={targets.calories} colors={GR.barWarm} showPct/></View>
-      <View style={S.heroOrb}><Orb size={72} colors={GR.blob}/><View style={S.heroFlame}><Icon name="flame" size={26} color={P.ink}/></View></View>
+      <Orb size={86} colors={GR.blob} style={S.heroOrb}/>
+      <View style={S.heroHead}><Icon name="flame" size={22} color={P.rose}/><Text style={S.heroLabel}>Calories</Text></View>
+      <View style={S.heroLine}>
+        <Text style={S.heroNum}>{Math.round(total.calories).toLocaleString("fr-FR")}</Text>
+        <Text style={S.heroTarget}>/ {targets.calories.toLocaleString("fr-FR")} kcal</Text>
+      </View>
+      <Progress value={total.calories} target={targets.calories} colors={GR.barWarm} showPct/>
     </Card>
   <View style={S.metrics}>
       <Metric icon="protein" iconColor={P.pinkSoft} label="Protéines" value={Math.round(total.protein)} target={targets.protein} display={targets.protein+" g"} tint={GR.protein} bar={GR.barPink}/>
       <Metric icon="steps" iconColor={P.cyan} label="Pas" value={stepValue} target={targets.steps} display={targets.steps>=1000?`${Math.round(targets.steps/100)/10}k`:targets.steps} tint={GR.steps} bar={GR.barCyan}/>
-      <Metric icon="sleep" iconColor={P.violetSoft} label="Sommeil" value={health.sleepMin?`${Math.floor(health.sleepMin/60)}h${String(health.sleepMin%60).padStart(2,"0")}`:"—"} display={`${Math.floor(targets.sleepMin/60)}h${String(targets.sleepMin%60).padStart(2,"0")}`} ratioValue={health.sleepMin||0} ratioTarget={targets.sleepMin} tint={GR.sleep} bar={GR.barViolet}/>
+      <Metric icon="sleep" iconColor={P.violetSoft} label="Sommeil" value={health.sleepMin?`${Math.floor(health.sleepMin/60)}h${String(health.sleepMin%60).padStart(2,"0")}`:"—"} display={`${Math.floor(targets.sleepMin/60)}h${String(targets.sleepMin%60).padStart(2,"0")}`} ratioValue={health.sleepMin||0} ratioTarget={targets.sleepMin} tint={GR.sleep} bar={GR.barViolet} orb={GR.blobViolet} note={quality?`Qualité ${Math.round(Number(quality)/5*100)} %`:null}/>
       <Metric icon="water" iconColor={P.cyan} label="Hydratation" value={fr((water/1000).toFixed(1))} display={`${fr((waterTarget/1000).toFixed(1))} L`} ratioValue={water} ratioTarget={waterTarget} tint={GR.water} bar={GR.barCyan}/>
     </View>
+  <View style={S.phase}><Text style={S.phaseIcon}>{phase.icon}</Text><View style={{flex:1}}><Text style={S.phaseTitle}>{phase.title}</Text><Text style={S.phaseSub}>{phase.sub}</Text></View>{dayStreak>0?<View style={S.streakBadge}><Text style={S.streakValue}>{dayStreak}</Text><Text style={S.streakLabel}>JOURS</Text></View>:<Text style={S.arrow}>›</Text>}</View>
   <Card><View style={S.cardHead}><View style={S.headLeft}><Icon name="brain" size={18} color={P.pinkSoft}/><Text style={S.section}>Décision du jour</Text></View><Text style={[S.ai,coachSource&&coachSource!=="ai"&&S.aiWarn]}>{coachSource==="ai"?"COACH IA":coachSource?"HORS LIGNE":"ADAPTATIF"}</Text></View>
       <Text style={S.coach}>{coach}</Text>
       <Text style={S.muted}>{coachLoading?"Analyse en cours…":coachStatusLabel}</Text>
@@ -240,18 +287,18 @@ return <ScrollView key="home" contentContainerStyle={S.content}>
   <Card style={S.workout}><View style={S.headLeft}><Icon name="program" size={18} color={P.violetSoft}/><Text style={S.section}>{jjb?"MMA / JJB":"Séance du jour"}</Text></View><Text style={S.workoutTitle}>{jjb?"Technique + sparring":`${todayWorkout().emoji} ${todayWorkout().name}`}</Text><Text style={S.muted}>{todayWorkout().subtitle} • {gym?"Séance activée":"À planifier"}</Text><Button title="Voir le programme" onPress={()=>setTab("program")} secondary/></Card>
   <Card><View style={S.headLeft}><Icon name="alert" size={18} color={P.warn}/><Text style={S.section}>Mode « journée difficile »</Text></View><Text style={S.muted}>Si tu es KO, active le mode récupération dans Programme : volume réduit, objectifs essentiels conservés.</Text></Card>
   <Card><View style={S.headLeft}><Icon name="water" size={18} color={P.cyan}/><Text style={S.section}>Hydratation</Text></View><Text style={S.text}>{water} / {waterTarget} ml</Text><Progress value={water} target={waterTarget}/><Field label="Quantité exacte (ml)" value={String(water)} onChange={setWaterAmount} keyboardType="numeric"/><View style={S.quickRow}><Button title="−250 ml" onPress={()=>setWaterAmount(water-250)} secondary/><Button title="+250 ml" onPress={()=>addWater(250)}/><Button title="+500 ml" onPress={()=>addWater(500)}/></View></Card>
-  <Card><View style={S.headLeft}><Icon name="clock" size={18} color={P.warn}/><Text style={S.section}>Caféine</Text></View><Text style={S.muted}>Le coach peut repérer si la caféine tardive coïncide avec un sommeil moins bon.</Text><View style={S.switchLine}><Text style={S.text}>Caféine après 16h</Text><Switch value={caffeine} onValueChange={setCaffeine} trackColor={{false:P.surfaceHigh,true:P.limeDeep}} thumbColor={caffeine?P.lime:P.inkMuted} ios_backgroundColor={P.surfaceHigh}/></View></Card>
+  <Card><View style={S.headLeft}><Icon name="clock" size={18} color={P.warn}/><Text style={S.section}>Caféine</Text></View><Text style={S.muted}>Le coach peut repérer si la caféine tardive coïncide avec un sommeil moins bon.</Text><View style={S.switchLine}><Text style={S.text}>Caféine après 16h</Text><Switch value={caffeine} onValueChange={setCaffeine} trackColor={{false:GL.fillStrong,true:P.violet}} thumbColor={caffeine?P.ink:P.inkMuted} ios_backgroundColor={P.night}/></View></Card>
   <View style={S.headLeft}><Icon name="clock" size={18} color={P.inkMuted}/><Text style={S.section}>Calendrier</Text></View><View style={S.timeline}>{["1–16 Sep","17–20 🇹🇳","Oct–Déc 🥋","Jan 🎓","Fév+ 💪"].map((x,i)=><View key={x} style={[S.timelineItem,(phase.key==="travel"&&i===1)||(phase.key==="internship"&&i===2)||(phase.key==="school"&&i===3)||(phase.key==="free"&&i===4)||(phase.key==="september"&&i===0)?S.timelineActive:null]}><Text style={S.timelineText}>{x}</Text></View>)}</View>
 </ScrollView>}
 
 function Nutrition({app}){
-const {foodDraft,setFoodDraft,restaurantChoice,photoMeal,photo,setPhoto,restaurantMode,remaining,pRemain,budget,changeBudget,targets,generateGroceries,groceryList,groceryChecked,toggleGrocery,clearGroceries,dynamicCarbs,total,addLog}=app;
+const {foodDraft,setFoodDraft,restaurantChoice,photoMeal,photo,setPhoto,restaurantMode,remaining,pRemain,budget,changeBudget,targets,generateGroceries,groceryList,groceryChecked,toggleGrocery,clearGroceries,dynamicCarbs,total,addLog,notify}=app;
 const f=foodDraft,setF=setFoodDraft;return <ScrollView key="nutrition" contentContainerStyle={S.content}>
   <Text style={S.title}>Nutrition</Text><Text style={S.muted}>Le coach te dit quoi manger maintenant.</Text><Button icon="nutrition" title="Je mange au restaurant" onPress={restaurantChoice} secondary/>
   <Pressable style={S.photoBox} onPress={photoMeal}>{photo?<Image source={{uri:photo}} style={S.photo}/>:<><Text style={{fontSize:40}}>📸</Text><Text style={S.photoTitle}>Photographier mon repas</Text><Text style={S.muted}>Analyse IA • calories • macros • confiance</Text></>}</Pressable>
-  {restaurantMode&&<Card><View style={S.headLeft}><Icon name="nutrition" size={18} color={P.warn}/><Text style={S.section}>Mode restaurant</Text></View><Text style={S.text}>Choisis ce que tu veux manger. L’objectif est d’estimer puis d’adapter le reste de la journée, pas de culpabiliser.</Text><Button title="Voir mes choix" onPress={()=>Alert.alert("Choix","Poulet + riz • Steak + pommes de terre • Burger : choisis selon tes envies et le budget restant.")}/></Card>}{photo&&<Card><View style={S.headLeft}><Icon name="sparkle" size={18} color={P.violetSoft}/><Text style={S.section}>Analyse IA</Text></View><Text style={S.text}>Photo prête à envoyer au serveur sécurisé.</Text><Button title="Analyser le repas" onPress={()=>Alert.alert("IA","Connecte le serveur IA pour l'analyse vision réelle.")}/><Button title="Supprimer" secondary onPress={()=>setPhoto(null)}/></Card>}
+  {restaurantMode&&<Card><View style={S.headLeft}><Icon name="nutrition" size={18} color={P.warn}/><Text style={S.section}>Mode restaurant</Text></View><Text style={S.text}>Choisis ce que tu veux manger. L’objectif est d’estimer puis d’adapter le reste de la journée, pas de culpabiliser.</Text><Button title="Voir mes choix" onPress={()=>notify("Choix","Poulet + riz • Steak + pommes de terre • Burger : choisis selon tes envies et le budget restant.")}/></Card>}{photo&&<Card><View style={S.headLeft}><Icon name="sparkle" size={18} color={P.violetSoft}/><Text style={S.section}>Analyse IA</Text></View><Text style={S.text}>Photo prête à envoyer au serveur sécurisé.</Text><Button title="Analyser le repas" onPress={()=>notify("IA","Connecte le serveur IA pour l'analyse vision réelle.")}/><Button title="Supprimer" secondary onPress={()=>setPhoto(null)}/></Card>}
   <Card><View style={S.headLeft}><Icon name="nutrition" size={18} color={P.pinkSoft}/><Text style={S.section}>Qu'est-ce que je mange maintenant ?</Text></View><Text style={S.text}>Tu as {remaining} kcal et {pRemain} g de protéines à couvrir.</Text><View style={S.option}><Text style={S.text}>🥣 Skyr + banane + avoine</Text><Text style={S.muted}>≈ 430 kcal • 28 P</Text></View><View style={S.option}><Text style={S.text}>🍗 Poulet + riz + légumes</Text><Text style={S.muted}>≈ 620 kcal • 48 P</Text></View><View style={S.option}><Text style={S.text}>🥛 Shake + banane</Text><Text style={S.muted}>≈ 390 kcal • 30 P</Text></View></Card>
-  <Card><View style={S.headLeft}><Icon name="heart" size={18} color={P.pinkSoft}/><Text style={S.section}>J’ai fait un écart</Text></View><Text style={S.muted}>Aucune compensation extrême. On reprend simplement le plan normal au prochain repas.</Text><Button title="Revenir au plan" onPress={()=>Alert.alert("C’est bon","Pas besoin de compenser. Reprends simplement tes objectifs habituels.")} secondary/></Card><Card><View style={S.cardHead}><View style={S.headLeft}><Icon name="cart" size={18} color={P.cyan}/><Text style={S.section}>Liste de courses</Text></View>{groceryList&&<Text style={S.ai}>{groceryChecked.length}/{groceryList.items.length}</Text>}</View>
+  <Card><View style={S.headLeft}><Icon name="heart" size={18} color={P.pinkSoft}/><Text style={S.section}>J’ai fait un écart</Text></View><Text style={S.muted}>Aucune compensation extrême. On reprend simplement le plan normal au prochain repas.</Text><Button title="Revenir au plan" onPress={()=>notify("C’est bon","Pas besoin de compenser. Reprends simplement tes objectifs habituels.")} secondary/></Card><Card><View style={S.cardHead}><View style={S.headLeft}><Icon name="cart" size={18} color={P.cyan}/><Text style={S.section}>Liste de courses</Text></View>{groceryList&&<Text style={S.ai}>{groceryChecked.length}/{groceryList.items.length}</Text>}</View>
       <Field label="Budget hebdomadaire (€)" value={budget} onChange={changeBudget} keyboardType="decimal-pad"/>
       <Text style={S.muted}>Calculée pour 7 jours à partir de {targets.calories} kcal et {targets.protein} g de protéines par jour.</Text>
       <Button title={groceryList?"Recalculer ma liste":"Calculer ma liste de courses"} onPress={generateGroceries}/>
@@ -276,7 +323,7 @@ const f=foodDraft,setF=setFoodDraft;return <ScrollView key="nutrition" contentCo
 </ScrollView>}
 
 function ProgressPage({app}){
-const {currentWeight,weight,setWeight,saveWeight,sleep,setSleep,wake,setWake,quality,setQuality,saveSleep,weekly,weeklyAnalysis,plateau,sleepAdvice,dayStreak,journal}=app;
+const {currentWeight,weight,setWeight,saveWeight,sleep,setSleep,wake,setWake,quality,setQuality,saveSleep,weekly,weeklyAnalysis,plateau,sleepAdvice,dayStreak,journal,notify}=app;
 return <ScrollView key="progress" contentContainerStyle={S.content}><Text style={S.title}>Progression</Text>
   <Card><View style={S.headLeft}><Icon name="scale" size={18} color={P.cyan}/><Text style={S.section}>Poids</Text></View><Text style={S.weight}>{currentWeight} <Text style={S.kg}>kg</Text></Text><Text style={S.good}>Objectif : +0,15 à +0,30 kg/semaine</Text><WeightChart series={weightSeries(journal)}/><Field label="Poids actuel" value={weight} onChange={setWeight} keyboardType="decimal-pad"/><Button title="Enregistrer" onPress={saveWeight}/></Card>
   <Card><View style={S.headLeft}><Icon name="sleep" size={18} color={P.violetSoft}/><Text style={S.section}>Sommeil</Text></View><Field label="Coucher" value={sleep} onChange={setSleep}/><Field label="Réveil" value={wake} onChange={setWake}/><Field label="Qualité 1–5" value={quality} onChange={setQuality} keyboardType="numeric"/><Button title="Enregistrer" onPress={saveSleep}/></Card>
@@ -297,7 +344,7 @@ return <ScrollView key="progress" contentContainerStyle={S.content}><Text style=
 </ScrollView>}
 
 function Profile({app}){
-const {targets,dynamicCarbs,notifications,scheduleNotifications,saveTargets,saveProfile,recovery,profile}=app;
+const {targets,dynamicCarbs,notifications,scheduleNotifications,saveTargets,saveProfile,recovery,profile,notify}=app;
 const [measures,setMeasures]=useState(null);
 const editingMeasures=measures!==null;
 const computed=profile?computeTargets(measures||profile):null;
@@ -307,7 +354,7 @@ const [draft,setDraft]=useState(null);
 const editing=draft!==null;
 const field=key=>String(draft?.[key]??"");
 function openEditor(){setDraft({...targets})}
-async function saveManualTargets(){await saveTargets(draft);setDraft(null);Alert.alert("Objectifs enregistrés","Tes chiffres remplacent le calcul automatique jusqu'à ta prochaine mise à jour de mesures.")}
+async function saveManualTargets(){await saveTargets(draft);setDraft(null);notify("Objectifs enregistrés","Tes chiffres remplacent le calcul automatique jusqu'à ta prochaine mise à jour de mesures.")}
 const goalLabel=profile?goalLabelFor(profile.goal):"Objectifs manuels";
 return <ScrollView key="profile" contentContainerStyle={S.content} keyboardShouldPersistTaps="handled"><Text style={S.title}>Profil</Text>
   <Card><View style={S.cardHead}><Text style={S.section}>Tes bases</Text><Text style={S.ai}>{goalLabel.toUpperCase()}</Text></View>
@@ -337,7 +384,7 @@ return <ScrollView key="profile" contentContainerStyle={S.content} keyboardShoul
         <View style={[S.radio,measures.goal===o.id&&S.radioOn]}/>
       </Pressable>)}</View>
       {computed&&computed.bmr>0&&<Text style={S.reason}>Ces mesures donnent {computed.calories} kcal et {computed.protein} g de protéines par jour.</Text>}
-      <Button title="Recalculer mes objectifs" onPress={async()=>{const c=await saveProfile(measures);setMeasures(null);Alert.alert("Mesures enregistrées",`Nouveaux objectifs : ${c.calories} kcal et ${c.protein} g de protéines.`)}}/>
+      <Button title="Recalculer mes objectifs" onPress={async()=>{const c=await saveProfile(measures);setMeasures(null);notify("Mesures enregistrées",`Nouveaux objectifs : ${c.calories} kcal et ${c.protein} g de protéines.`)}}/>
       <Button title="Annuler" onPress={()=>setMeasures(null)} secondary/>
     </View>}
     {editing&&<View style={S.editBlock}>
@@ -358,7 +405,7 @@ return <ScrollView key="profile" contentContainerStyle={S.content} keyboardShoul
     {targets.calories!==computed.calories&&<Text style={S.restFoot}>Tes objectifs sont ajustés à la main ({targets.calories} kcal au lieu de {computed.calories} kcal calculées).</Text>}
   </Card>}
   <Card><View style={S.cardHead}><View style={S.headLeft}><Icon name="battery" size={18} color={P.cyan}/><Text style={S.section}>Récupération actuelle</Text></View><Text style={S.ai}>{recovery}/100</Text></View><Progress value={recovery} target={100}/><Text style={S.muted}>Calculée à partir du sommeil, de la nutrition, de l'hydratation et des séances.</Text></Card>
-  <Card><View style={S.switchLine}><View><View style={S.headLeft}><Icon name="bell" size={18} color={P.warn}/><Text style={S.section}>Notifications intelligentes</Text></View><Text style={S.muted}>Repas • entraînement • sommeil</Text></View><Switch value={notifications} onValueChange={scheduleNotifications} trackColor={{false:P.surfaceHigh,true:P.limeDeep}} thumbColor={notifications?P.lime:P.inkMuted} ios_backgroundColor={P.surfaceHigh}/></View></Card>
+  <Card><View style={S.switchLine}><View><View style={S.headLeft}><Icon name="bell" size={18} color={P.warn}/><Text style={S.section}>Notifications intelligentes</Text></View><Text style={S.muted}>Repas • entraînement • sommeil</Text></View><Switch value={notifications} onValueChange={scheduleNotifications} trackColor={{false:GL.fillStrong,true:P.violet}} thumbColor={notifications?P.ink:P.inkMuted} ios_backgroundColor={P.night}/></View></Card>
   <Card><View style={S.cardHead}><View style={S.headLeft}><Icon name="heart" size={18} color={P.pink}/><Text style={S.section}>Apple Santé</Text></View><Text style={S.ai}>{FEATURES.healthKit?"ACTIF":"HORS LIGNE"}</Text></View><Text style={S.text}>Pas • sommeil • poids • énergie active</Text><Text style={S.muted}>{FEATURES.healthKit?"Les données confirmées par HealthKit sont prioritaires sur les estimations.":"HealthKit s'active dans une development build iOS. En attendant, saisis tes pas et ton sommeil à la main : rien n'est inventé."}</Text></Card>
   <Card><View style={S.headLeft}><Icon name="lock" size={18} color={P.inkMuted}/><Text style={S.section}>Confidentialité</Text></View><Text style={S.muted}>La clé IA reste sur le serveur. L'application ne doit jamais embarquer OPENROUTER_API_KEY.</Text></Card>
 </ScrollView>}
@@ -377,6 +424,8 @@ export default function App(){
   const [coach,setCoach]=useState("Appuie sur « Analyser ma journée » pour obtenir une décision claire.");
   const [coachLoading,setCoachLoading]=useState(false),[photo,setPhoto]=useState(null),[budget,setBudget]=useState("60");
   const [coachStatus,setCoachStatus]=useState({state:"checking"}),[coachSource,setCoachSource]=useState(null);
+  const [toast,setToast]=useState(null);
+  const notify=(title,body,tone)=>setToast({title,body,tone,at:Date.now()});
   const [weekly,setWeekly]=useState({score:0,weightChange:0,avgCalories:0,avgProtein:0});
   const [foodDraft,setFoodDraft]=useState({name:"",calories:"",protein:"",carbs:"",fat:""});
   const [groceryList,setGroceryList]=useState(null),[groceryChecked,setGroceryChecked]=useState([]),[exerciseOverrides,setExerciseOverrides]=useState({});
@@ -477,10 +526,44 @@ export default function App(){
     const n=sleepMin();setHealth(h=>({...h,sleepMin:n}));
     // Écrit dans le journal : c'est ce qui rend la dette de sommeil et la récupération calculables.
     await recordToday({sleepMin:n,sleepQuality:Number(quality)||null});
-    Alert.alert("Sommeil",`${Math.floor(n/60)}h${String(n%60).padStart(2,"0")} • ${quality}/5 enregistré`);
+    notify("Sommeil",`${Math.floor(n/60)}h${String(n%60).padStart(2,"0")} • ${quality}/5 enregistré`);
   }
-  async function photoMeal(){const p=await ImagePicker.requestCameraPermissionsAsync();if(!p.granted)return Alert.alert("Caméra","Autorise la caméra dans Réglages.");const r=await ImagePicker.launchCameraAsync({mediaTypes:["images"],quality:.8});if(!r.canceled)setPhoto(r.assets[0].uri)}
-  async function scheduleNotifications(v){setNotifications(v);await Notifications.requestPermissionsAsync();await Notifications.cancelAllScheduledNotificationsAsync();if(!v)return;for(const [h,m,t,b] of [[8,0,"🌅 YProgress","Petit-déjeuner + protéines"],[13,0,"🍽️ YProgress","Enregistre ton déjeuner"],[16,30,"🥛 YProgress","Vérifie tes protéines"],[19,0,"🏋️ YProgress","Prépare ton entraînement"],[22,30,"😴 YProgress","Protège ton sommeil"]])await Notifications.scheduleNotificationAsync({content:{title:t,body:b},trigger:{hour:h,minute:m,repeats:true}})}
+  async function photoMeal(){const p=await ImagePicker.requestCameraPermissionsAsync();if(!p.granted)return notify("Caméra bloquée","Autorise la caméra dans les réglages du navigateur.","error");const r=await ImagePicker.launchCameraAsync({mediaTypes:["images"],quality:.8});if(!r.canceled)setPhoto(r.assets[0].uri)}
+  /**
+   * Rappels quotidiens.
+   * expo-notifications n'a PAS d'implémentation de planification sur le web :
+   * NotificationScheduler y est un stub vide. On le dit au lieu d'échouer en silence.
+   */
+  async function scheduleNotifications(v){
+    if(Platform.OS==="web"){
+      setNotifications(false);
+      notify("Rappels indisponibles sur le web","Les rappels programmés n'existent pas dans une PWA iOS : le navigateur ne permet pas de planifier une notification locale. Il faut une build native.");
+      return;
+    }
+    try{
+      const perm=await Notifications.requestPermissionsAsync();
+      if(!perm.granted){
+        setNotifications(false);
+        notify("Autorisation refusée","Active les notifications pour YProgress dans Réglages > Notifications.","error");
+        return;
+      }
+      setNotifications(v);
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      if(!v) return;
+      for(const [h,m,title,body] of REMINDERS){
+        await Notifications.scheduleNotificationAsync({
+          content:{title,body},
+          // SDK 54 : le format {hour,minute,repeats} n'est plus accepté.
+          trigger:{type:Notifications.SchedulableTriggerInputTypes.DAILY,hour:h,minute:m}
+        });
+      }
+      const planned=await Notifications.getAllScheduledNotificationsAsync();
+      notify("Rappels activés",`${planned.length} rappel(s) programmé(s) chaque jour.`);
+    }catch(error){
+      setNotifications(false);
+      notify("Rappels indisponibles",String(error?.message||error),"error");
+    }
+  }
   /** Ce que l'app sait déjà : le coach doit le recevoir, sinon il ne peut rien justifier. */
   function buildCoachPayload(){
     const day=dayByKey(dayKeyForDate()),workout=WORKOUTS[day.name];
@@ -532,7 +615,7 @@ export default function App(){
     const summary=weeklySummary(journalRef.current,targets,7);
     setWeekly(summary);
     await store.set(KEYS.weekly,summary);
-    Alert.alert("Bilan hebdomadaire",summary.sampleDays?`Score de régularité : ${summary.score}/100\nCalculé sur ${summary.sampleDays} jour(s) enregistré(s).`:"Pas encore assez de données : enregistre tes repas, ton sommeil et ton poids pendant quelques jours.");
+    notify("Bilan hebdomadaire",summary.sampleDays?`Score de régularité : ${summary.score}/100\nCalculé sur ${summary.sampleDays} jour(s) enregistré(s).`:"Pas encore assez de données : enregistre tes repas, ton sommeil et ton poids pendant quelques jours.");
   }
 
   // Le moteur vit dans src/core/autopilot.js : App.js ne réimplémente plus la logique.
@@ -581,17 +664,17 @@ export default function App(){
   function applyAutopilot(){
     setHardDay(false);
     setRestaurantMode(false);
-    Alert.alert("Autopilot activé","YProgress va privilégier 3 actions essentielles par jour et adapter entraînement, alimentation et récupération.");
+    notify("Autopilot activé","YProgress va privilégier 3 actions essentielles par jour et adapter entraînement, alimentation et récupération.");
   }
 
   function emergencyDay(){
     setHardDay(true);
-    Alert.alert("Minimum Day","Aujourd'hui : protéines, hydratation, marche légère et sommeil. Pas besoin d'une journée parfaite.");
+    notify("Minimum Day","Aujourd'hui : protéines, hydratation, marche légère et sommeil. Pas besoin d'une journée parfaite.");
   }
 
   function restaurantChoice(){
     setRestaurantMode(true);
-    Alert.alert("Mode restaurant","Choisis le plat qui te plaît. YProgress estimera les calories et ajustera le reste de ta journée sans culpabilisation.");
+    notify("Mode restaurant","Choisis le plat qui te plaît. YProgress estimera les calories et ajustera le reste de ta journée sans culpabilisation.");
   }
 
   async function setWaterAmount(value){
@@ -614,12 +697,12 @@ export default function App(){
   }
   async function completeExercise(exercise,recommendation){
     const draft=workoutLogs[`${trainingWeek}:${exercise.id}`];
-    if(!draft||draft.sets.length<exercise.sets||draft.sets.some(set=>!set?.load||!set?.reps))return Alert.alert("Performance incomplète","Renseigne la charge et les répétitions de chaque série.");
+    if(!draft||draft.sets.length<exercise.sets||draft.sets.some(set=>!set?.load||!set?.reps))return notify("Performance incomplète","Renseigne la charge et les répétitions de chaque série.","error");
     const sets=draft.sets.map(set=>({load:Number(set.load),reps:Number(set.reps),rir:set.rir===""||set.rir==null?null:Number(set.rir)}));
     const performance={exerciseId:exercise.id,exerciseName:exercise.name,week:trainingWeek,plannedLoad:recommendation.recommendedLoad,actualLoad:sets[0].load,sets,completed:true,createdAt:new Date().toISOString()};
     const next=appendPerformance(trainingHistory,performance);setTrainingHistory(next);await store.set(KEYS.trainingHistory,next);
     await recordToday({gym:true});
-    Alert.alert("Performance enregistrée",`Semaine ${trainingWeek} sauvegardée pour ${exercise.name}.`);
+    notify("Performance enregistrée",`Semaine ${trainingWeek} sauvegardée pour ${exercise.name}.`);
   }
   async function changeTrainingWeek(week){const value=Math.max(1,Math.round(Number(week)||1));setTrainingWeek(value);await store.set(KEYS.trainingWeek,value);}
   async function replaceExercise(slotId,exercise){const next={...exerciseOverrides};if(exercise)next[slotId]=exercise;else delete next[slotId];setExerciseOverrides(next);await store.set(KEYS.exerciseOverrides,next);}
@@ -686,7 +769,7 @@ export default function App(){
     foodDraft,setFoodDraft,restaurantChoice,photoMeal,photo,setPhoto,restaurantMode,pRemain,budget,changeBudget,generateGroceries,groceryList,groceryChecked,toggleGrocery,clearGroceries,dynamicCarbs,addLog,
     currentWeight,weight,setWeight,saveWeight,sleep,setSleep,wake,setWake,setQuality,saveSleep,weekly,weeklyAnalysis,plateau,sleepAdvice,journal,
     notifications,scheduleNotifications,saveTargets,setStepCount,ready,
-    profile,saveProfile,coachStatus,coachSource};
+    profile,saveProfile,coachStatus,coachSource,notify};
   const pages={
     home:<Home app={app}/>,
     nutrition:<Nutrition app={app}/>,
@@ -694,7 +777,7 @@ export default function App(){
     progress:<ProgressPage app={app}/>,
     profile:<Profile app={app}/>
   };
-  return <SafeAreaView style={S.safe}><StatusBar style="light"/><Aura/>{pages[tab]}<View style={S.navWrap} pointerEvents="box-none"><View style={S.bottom}>{[["home","home","Accueil"],["nutrition","nutrition","Nutrition"],["program","program","Programme"],["progress","progress","Progrès"],["profile","profile","Profil"]].map(([id,ic,l])=><Pressable accessibilityRole="tab" accessibilityLabel={l} accessibilityState={{selected:tab===id}} key={id} onPress={()=>setTab(id)} style={({pressed})=>[S.nav,tab===id&&S.navActive,pressed&&S.buttonPressed]}><Icon name={ic} size={21} color={tab===id?P.blueSoft:P.inkFaint}/><Text style={[S.navText,tab===id&&S.navTextActive]} numberOfLines={1}>{l}</Text></Pressable>)}</View></View></SafeAreaView>
+  return <SafeAreaView style={S.safe}><StatusBar style="light"/><Aura/>{pages[tab]}<Toast data={toast} onHide={()=>setToast(null)}/><View style={S.navWrap} pointerEvents="box-none"><View style={S.bottom}>{[["home","home","Accueil"],["nutrition","nutrition","Nutrition"],["program","program","Programme"],["progress","progress","Progrès"],["profile","profile","Profil"]].map(([id,ic,l])=><Pressable accessibilityRole="tab" accessibilityLabel={l} accessibilityState={{selected:tab===id}} key={id} onPress={()=>setTab(id)} style={({pressed})=>[S.nav,tab===id&&S.navActive,pressed&&S.buttonPressed]}><Icon name={ic} size={21} color={tab===id?P.blueSoft:P.inkFaint}/><Text style={[S.navText,tab===id&&S.navTextActive]} numberOfLines={1}>{l}</Text></Pressable>)}</View></View></SafeAreaView>
 }
 
 const S=StyleSheet.create({
@@ -745,17 +828,29 @@ const S=StyleSheet.create({
   alertCard:{borderColor:"rgba(242,112,74,0.5)"},
 
   // ---------- Hero « reste à manger » ----------
-  hero:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",gap:SP.md},
-  heroNum:{...T.dataXl,color:P.ink,lineHeight:50},
+  hero:{overflow:"hidden"},
+  heroNum:{fontFamily:F.sans,fontSize:34,fontWeight:"800",letterSpacing:-1,color:P.ink,lineHeight:40},
   glow:{width:66,height:66,borderRadius:RD.lg,alignItems:"center",justifyContent:"center",backgroundColor:GL.fillStrong,borderWidth:1,borderColor:GL.border},
 
   // ---------- Métriques en grille 2×2 ----------
   metrics:{flexDirection:"row",flexWrap:"wrap",gap:SP.md,marginBottom:SP.md},
   metric:{...glassStyle(16),flexGrow:1,flexBasis:"46%",minWidth:150,borderRadius:RD.lg,borderWidth:1,borderColor:GL.border,overflow:"hidden",backgroundColor:GL.fillSoft,...SH.card},
   metricBody:{padding:SP.md,gap:SP.xs},
+  metricOrb:{position:"absolute",top:6,right:8,opacity:.35},
+  metricNote:{...T.muted,fontSize:11,color:"rgba(255,255,255,0.6)"},
+  toastWrap:{position:"absolute",left:0,right:0,bottom:LAYOUT.navHeight+SP.xl,alignItems:"center",paddingHorizontal:SP.lg},
+  toast:{width:"100%",maxWidth:LAYOUT.maxContentWidth-SP.lg,flexDirection:"row",alignItems:"center",gap:SP.md,paddingHorizontal:SP.lg,paddingVertical:SP.md,borderRadius:RD.lg,borderWidth:1,borderColor:GL.borderBright,overflow:"hidden",...SH.lift},
+  toastTitle:{...T.section,fontSize:14,color:P.ink},
+  toastBody:{...T.muted,fontSize:12.5,color:"rgba(255,255,255,0.85)"},
+  bellButton:{width:46,height:46,borderRadius:RD.pill,alignItems:"center",justifyContent:"center",backgroundColor:GL.fill,borderWidth:1,borderColor:GL.border},
+  bellDot:{position:"absolute",top:10,right:11,width:9,height:9,borderRadius:RD.pill,backgroundColor:P.pink,borderWidth:1.5,borderColor:P.void},
+  heroHead:{flexDirection:"row",alignItems:"center",gap:SP.sm,marginBottom:SP.xs},
+  heroLabel:{...T.section,fontSize:16,color:P.ink},
+  heroLine:{flexDirection:"row",alignItems:"baseline",gap:SP.sm,flexWrap:"wrap",marginBottom:SP.sm},
+  heroTarget:{...T.muted,fontSize:13,color:"rgba(255,255,255,0.75)"},
   metricHead:{flexDirection:"row",alignItems:"center",gap:SP.sm},
-  heroOrb:{alignItems:"center",justifyContent:"center"},
-  heroFlame:{position:"absolute"},
+  heroOrb:{position:"absolute",top:-6,right:-4,opacity:.45},
+
   metricLine:{flexDirection:"row",alignItems:"baseline",gap:SP.xs,flexWrap:"wrap"},
   metricValue:{fontFamily:F.sans,fontSize:26,fontWeight:"800",letterSpacing:-.8,color:P.ink,lineHeight:31},
   metricTarget:{...T.muted,fontSize:11.5,color:P.inkMuted},

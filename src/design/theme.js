@@ -74,13 +74,15 @@ export const gradient = {
   hero: ["#C93B52", "#7C1E54", "#3A1450", "#1D1467", "#241D98"],
   // Bouton principal : bleu → violet → rose.
   cta: ["#2550FC", "#7A49E3", "#D43FA1"],
+  clay: ["#F2704A", "#B5391A"],
+  amber: ["#FFB443", "#C77A00"],
   ctaPressed: ["#1C3CC4", "#6338BC", "#AE2F81"],
-  // Cartes métriques
-  calories: ["rgba(201,59,82,0.32)", "rgba(36,29,152,0.30)"],
-  protein: ["rgba(87,40,100,0.55)", "rgba(87,40,100,0.18)"],
-  steps: ["rgba(12,52,101,0.62)", "rgba(12,52,101,0.20)"],
-  sleep: ["rgba(59,42,119,0.58)", "rgba(59,42,119,0.18)"],
-  water: ["rgba(43,71,119,0.60)", "rgba(43,71,119,0.18)"],
+  // Cartes métriques — saturation calée sur la maquette, pas sur une teinte lavée.
+  calories: ["#C93B52", "#5A1A52", "#241D98"],
+  protein: ["#6B2F7A", "#3A1B47"],
+  steps: ["#0F4079", "#0A2242"],
+  sleep: ["#4A3492", "#241A4C"],
+  water: ["#33558E", "#1B2E4F"],
   // Surfaces neutres en verre
   glass: ["rgba(255,255,255,0.085)", "rgba(255,255,255,0.022)"],
   glassSoft: ["rgba(255,255,255,0.05)", "rgba(255,255,255,0.012)"],
@@ -90,7 +92,7 @@ export const gradient = {
   barCyan: ["#2BC4EC", "#7FE3FF"],
   barViolet: ["#7A49E3", "#A77BF0"],
   // Reflet appliqué sur la moitié haute des éléments en verre
-  sheen: ["rgba(255,255,255,0.26)", "rgba(255,255,255,0.05)", "rgba(255,255,255,0)"],
+  sheen: ["rgba(255,255,255,0.20)", "rgba(255,255,255,0.04)", "rgba(255,255,255,0)"],
   // Sphères décoratives
   blob: ["#4C8BFF", "#1D24AB"],
   blobViolet: ["#A77BF0", "#3C126F"],
