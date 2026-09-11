@@ -4,8 +4,8 @@
   "description": "Coach personnel nutrition, entraînement, récupération et progression.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#101309",
-  "theme_color": "#101309",
+  "background_color": "#020A1A",
+  "theme_color": "#020A1A",
   "orientation": "portrait",
   "icons": [
     {

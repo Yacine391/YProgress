@@ -7,7 +7,7 @@
  *
  * CACHE doit être incrémenté à chaque release (voir package.json "version").
  */
-const VERSION = "15.8.0";
+const VERSION = "16.0.0";
 const CACHE = `yprogress-${VERSION}`;
 const CORE = ["/", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
 

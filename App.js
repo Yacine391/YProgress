@@ -16,7 +16,8 @@ import {recoveryScore} from "./src/core/progression";
 import {sleepAutoDetection} from "./src/services/health/sleepAutoDetection";
 import {FEATURES} from "./src/core/featureFlags";
 import {SEXES,ACTIVITY_LEVELS,GOALS,computeTargets,isProfileComplete,maintenanceCalories,expectedWeeklyRange} from "./src/core/profile";
-import {palette as P,glass as GL,gradient as GR,space as SP,radius as RD,type as T,font as F,shadow as SH,LAYOUT,metricColumns,typeScale} from "./src/design/theme";
+import {palette as P,glass as GL,gradient as GR,space as SP,radius as RD,type as T,font as F,shadow as SH,LAYOUT,blurStyle,glassStyle} from "./src/design/theme";
+import {Icon} from "./src/design/icons";
 
 const BASE={calories:2500,protein:110,fat:70,steps:10000,sleepMin:450};
 // Application personnelle : le profil est pré-rempli, modifiable depuis l'onglet Profil.
@@ -36,22 +37,69 @@ function phaseFor(date=new Date()){
   if(y>=2027&&m>=2)return{key:"free",icon:"🏋️",title:"Accès libre",sub:"Optimisation"};
   return{key:"default",icon:"✨",title:"YProgress",sub:"Routine personnelle"};
 }
-function Card({children,style}){return <View style={[S.card,style]}>{children}</View>}
-function Button({title,onPress,secondary,tone="lime",style}){
-  const fill=tone==="teal"?GR.teal:tone==="clay"?GR.clay:GR.lime;
+/**
+ * Carte « liquid glass » : dégradé translucide, bordure claire, et un reflet
+ * plus vif sur l'arête haute — c'est ce reflet qui donne l'épaisseur.
+ */
+/** En-tête de carte : icône vectorielle plutôt qu'emoji, couleur maîtrisée. */
+function Head({icon,color,children,right}){
+  return <View style={S.cardHead}>
+    <View style={S.headLeft}><Icon name={icon} size={18} color={color||P.inkSoft}/><Text style={S.section}>{children}</Text></View>
+    {right}
+  </View>;
+}
+
+function Card({children,style,bodyStyle,tint,glow}){
+  return <View style={[S.card,glow&&S.cardGlow,style]}>
+    <LinearGradient colors={tint||GR.glass} start={{x:.1,y:0}} end={{x:.9,y:1}} style={StyleSheet.absoluteFill} pointerEvents="none"/>
+    <LinearGradient colors={GR.sheen} locations={[0,.5,1]} start={{x:0,y:0}} end={{x:0,y:1}} style={S.cardSheen} pointerEvents="none"/>
+    <View style={[S.cardBody,bodyStyle]}>{children}</View>
+  </View>;
+}
+
+/** Halos de fond. Ils portent l'atmosphère de la maquette. */
+function Aura(){
+  return <View style={S.aura} pointerEvents="none">
+    <View style={[S.blob,S.blobTop]}/>
+    <View style={[S.blob,S.blobBottom]}/>
+    <View style={[S.blob,S.blobMid]}/>
+  </View>;
+}
+
+/** Sphère glossy décorative, comme les blobs liquides de la maquette. */
+function Orb({size=64,colors,style}){
+  return <View style={[{width:size,height:size,borderRadius:size/2,overflow:"hidden"},style]} pointerEvents="none">
+    <LinearGradient colors={colors||GR.blob} start={{x:.2,y:0}} end={{x:.8,y:1}} style={StyleSheet.absoluteFill}/>
+    <LinearGradient colors={GR.sheen} start={{x:.3,y:0}} end={{x:.7,y:1}} style={{position:"absolute",left:"12%",top:"6%",width:"62%",height:"46%",borderRadius:size/2}}/>
+  </View>;
+}
+function Button({title,onPress,secondary,tone="cta",style,icon}){
+  const fill=tone==="cyan"?GR.barCyan:tone==="violet"?GR.barViolet:GR.cta;
   return <Pressable accessibilityRole="button" onPress={onPress} style={({pressed})=>[S.button,secondary&&S.button2,style,pressed&&S.buttonPressed]}>
     {!secondary&&<LinearGradient colors={fill} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill} pointerEvents="none"/>}
     <LinearGradient colors={GR.sheen} locations={[0,.6,1]} start={{x:0,y:0}} end={{x:0,y:1}} style={S.buttonSheen} pointerEvents="none"/>
-    <View style={S.buttonInner} pointerEvents="none"><Text style={[S.buttonText,secondary&&S.buttonText2]}>{title}</Text></View>
+    <View style={S.buttonInner} pointerEvents="none">{icon&&<Icon name={icon} size={17} color={secondary?P.inkSoft:P.ink} style={{marginRight:SP.sm}}/>}<Text style={[S.buttonText,secondary&&S.buttonText2]}>{title}</Text></View>
   </Pressable>
 }
 function Field({label,value,onChange,keyboardType,style,placeholder}){return <View style={[{marginBottom:SP.md},style]}><Text style={S.label}>{label}</Text><TextInput accessibilityLabel={label} value={value} onChangeText={onChange} keyboardType={keyboardType||"default"} style={S.input} placeholder={placeholder} placeholderTextColor={P.inkFaint}/></View>}
-function Progress({value,target}){const p=clamp((Number(value)||0)/(Number(target)||1),0,1);return <View style={S.track}><View style={[S.fill,{width:`${p*100}%`}]}/></View>}
-function Metric({emoji,label,value,target,display}){return <View style={S.metric}>
-  <Text style={S.metricLabel} numberOfLines={1}>{emoji} {label}</Text>
-  <Text style={S.metricValue} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
-  <Text style={S.metricTarget} numberOfLines={1}>/ {display??target}</Text>
-  <Progress value={value} target={Number(target)||1}/>
+function Progress({value,target,colors,showPct}){
+  const p=clamp((Number(value)||0)/(Number(target)||1),0,1);
+  return <View style={S.progressRow}>
+    <View style={S.track}><LinearGradient colors={colors||GR.barWarm} start={{x:0,y:0}} end={{x:1,y:0}} style={[S.fill,{width:`${p*100}%`}]}/></View>
+    {showPct&&<Text style={S.pct}>{Math.round(p*100)}%</Text>}
+  </View>;
+}
+function Metric({icon,iconColor,label,value,target,display,tint,bar,ratioValue,ratioTarget}){return <View style={S.metric}>
+  <LinearGradient colors={tint||GR.glass} start={{x:.1,y:0}} end={{x:.9,y:1}} style={StyleSheet.absoluteFill} pointerEvents="none"/>
+  <LinearGradient colors={GR.sheen} locations={[0,.5,1]} start={{x:0,y:0}} end={{x:0,y:1}} style={S.cardSheen} pointerEvents="none"/>
+  <View style={S.metricBody}>
+    <View style={S.metricHead}><Icon name={icon} size={17} color={iconColor||P.inkSoft}/><Text style={S.metricLabel} numberOfLines={1}>{label}</Text></View>
+    <View style={S.metricLine}>
+      <Text style={S.metricValue} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
+      <Text style={S.metricTarget} numberOfLines={1}>/ {display??target}</Text>
+    </View>
+    <Progress value={ratioValue!==undefined?ratioValue:value} target={ratioTarget!==undefined?ratioTarget:target} colors={bar} showPct/>
+  </View>
 </View>}
 /** Courbe de poids réelle : normalisée entre min et max, avec état vide honnête. */
 function WeightChart({series=[],max=14}){
@@ -85,7 +133,7 @@ function ExerciseVideoModal({exercise,onClose}){
   return <Modal visible={Boolean(exercise)} transparent animationType="fade" onRequestClose={onClose}>
     <View style={S.modalBackdrop}><View style={S.videoModal}>
       <View style={S.modalHead}><View style={{flex:1}}><Text style={S.eyebrow}>DÉMONSTRATION</Text><Text style={S.exerciseName}>{exercise?.name}</Text></View><Pressable accessibilityLabel="Fermer la vidéo" onPress={onClose} style={S.closeButton}><Text style={S.closeText}>×</Text></Pressable></View>
-      {Platform.OS==="web"&&video?React.createElement("iframe",{src:embedUrl,title:`Démonstration ${exercise?.name}`,style:{width:"100%",aspectRatio:"16 / 9",border:0,borderRadius:RD.lg,backgroundColor:P.void,marginBottom:SP.md},allow:"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share",allowFullScreen:true}):<Pressable style={[S.video,S.nativeVideoFallback]} onPress={()=>watchUrl&&Linking.openURL(watchUrl)}><Text style={S.videoButtonText}>▶ Ouvrir la démonstration YouTube</Text></Pressable>}
+      {Platform.OS==="web"&&video?React.createElement("iframe",{src:embedUrl,title:`Démonstration ${exercise?.name}`,style:{width:"100%",aspectRatio:"16 / 9",border:0,borderRadius:RD.lg,backgroundColor:P.void,marginBottom:SP.md},allow:"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share",allowFullScreen:true}):<Pressable style={[S.video,S.nativeVideoFallback]} onPress={()=>watchUrl&&Linking.openURL(watchUrl)}><View style={S.rowCenter}><Icon name="play" size={16} color={P.ink}/><Text style={S.videoButtonText}>Ouvrir la démonstration YouTube</Text></View></Pressable>}
       <Text style={S.videoSource}>{video?.title} • {video?.channel}</Text>
       <Text style={S.text}>Contrôle le mouvement, garde une amplitude confortable et arrête la série si la technique se dégrade.</Text>
     </View></View>
@@ -123,7 +171,7 @@ function ProgramPage({selectedDayKey,setSelectedDayKey,week,setWeek,drafts,onSav
     </LinearGradient>
     {Object.keys(exerciseOverrides).length>0&&workout.type!=="REST"&&<Card style={S.favoritesCard}><Text style={S.drillBadge}>⭐ MES EXERCICES FAVORIS</Text><View style={S.favoriteWrap}>{Object.entries(exerciseOverrides).map(([slot,item])=><View key={slot} style={S.favoritePill}><Text style={S.favoriteText}>{item.name}</Text></View>)}</View></Card>}
     {workout.type==="REST"?<Card style={S.restDay}><Text style={S.restTitle}>RÉCUPÉRATION</Text><Text style={S.coach}>Pas de séance prévue aujourd’hui.</Text>{workout.priorities.map(item=><View key={item} style={S.priorityRow}><Text style={S.check}>✓</Text><Text style={S.text}>{item}</Text></View>)}<Text style={S.restFoot}>Aucune charge n’est calculée pendant un jour REST.</Text></Card>:<>
-      <Button title="😵 Adapter si je suis KO" onPress={onEmergency} secondary/>
+      <Button icon="alert" title="Adapter si je suis KO" onPress={onEmergency} secondary/>
       {hardDay&&<Card style={S.autopilot}><Text style={S.section}>MINIMUM DAY</Text><Text style={S.text}>Protéines • hydratation • marche légère • sommeil</Text></Card>}
       {workout.exercises.map((exercise,index)=>{
         const shownExercise=!strength&&(exercise.id==="drills"||exercise.id==="free-activity")?jjbDrillFor(week,day.key):(exerciseOverrides[exercise.id]||exercise);
@@ -132,8 +180,8 @@ function ProgramPage({selectedDayKey,setSelectedDayKey,week,setWeek,drafts,onSav
         const recommendation=strength?recommendNextLoad({exercise:shownExercise,history:exerciseHistory,context:progressionContext}):null;
         return <Card key={shownExercise.id} style={[S.exerciseCard,shownExercise.isDrill&&S.drillCard]}>
           {shownExercise.isDrill&&<Text style={S.drillBadge}>NOUVELLE TECHNIQUE • SEMAINE {week}</Text>}
-          <View style={S.exerciseTop}><View style={S.exerciseNumber}><Text style={S.exerciseNumberText}>{index+1}</Text></View><View style={{flex:1}}><Text style={S.exerciseName}>{shownExercise.name}</Text><Text style={S.muted}>{shownExercise.muscles}</Text></View>{shownExercise.video?<Pressable onPress={()=>setVideoExercise(shownExercise)} style={S.videoButton}><Text style={S.videoButtonText}>▶ {strength?"Voir exo":"Voir technique"}</Text></Pressable>:<Text style={S.noVideo}>Vidéo à renseigner</Text>}</View>
-          {strength&&<Pressable onPress={()=>setSwapSlot(exercise)} style={S.changeButton}><Text style={S.changeButtonText}>⇄ Changer l’exercice</Text></Pressable>}
+          <View style={S.exerciseTop}><View style={S.exerciseNumber}><Text style={S.exerciseNumberText}>{index+1}</Text></View><View style={{flex:1}}><Text style={S.exerciseName}>{shownExercise.name}</Text><Text style={S.muted}>{shownExercise.muscles}</Text></View>{shownExercise.video?<Pressable onPress={()=>setVideoExercise(shownExercise)} style={S.videoButton}><View style={S.rowCenter}><Icon name="play" size={14} color={P.ink}/><Text style={S.videoButtonText}>{strength?"Voir exo":"Voir technique"}</Text></View></Pressable>:<Text style={S.noVideo}>Vidéo à renseigner</Text>}</View>
+          {strength&&<Pressable onPress={()=>setSwapSlot(exercise)} style={S.changeButton}><View style={S.rowCenter}><Icon name="swap" size={14} color={P.inkMuted}/><Text style={S.changeButtonText}>Changer l’exercice</Text></View></Pressable>}
           {strength?<><View style={S.prescriptionRow}><Text style={S.prescription}>{shownExercise.sets} × {shownExercise.minReps}–{shownExercise.maxReps}</Text><View style={S.loadChip}><Text style={S.loadChipLabel}>{recommendation.action==="start"?"DÉPART":recommendation.action==="increase"?"↑ PROGRESSION":recommendation.action==="decrease"?"↓ ADAPTÉE":"→ MAINTIEN"}</Text><Text style={S.loadChipValue}>{recommendation.recommendedLoad} kg</Text></View></View><Text style={S.reason}>{recommendation.reasons[0]}</Text>
             <View style={S.setHead}><Text style={S.setLabel}> </Text>{["KG","REPS","RIR"].map(h=><Text key={h} style={S.setHeadCell}>{h}</Text>)}</View>
             {Array.from({length:shownExercise.sets},(_,setIndex)=>{const set=sets[setIndex]||{};return <View key={setIndex} style={S.setRow}>
@@ -167,34 +215,43 @@ const coachStatusLabel=
 return <ScrollView key="home" contentContainerStyle={S.content}>
   <View style={S.header}><View><Text style={S.eyebrow}>YPROGRESS • COACH OS</Text><Text style={S.title}>{profile?.name?`Salut ${profile.name} 👋`:"Salut 👋"}</Text><Text style={S.muted}>Ton coach décide avec toi.</Text></View><View style={S.avatar}><Text style={S.avatarText}>{(profile?.name||"Y").trim().charAt(0).toUpperCase()}</Text></View></View>
   <View style={S.phase}><Text style={S.phaseIcon}>{phase.icon}</Text><View style={{flex:1}}><Text style={S.phaseTitle}>{phase.title}</Text><Text style={S.phaseSub}>{phase.sub}</Text></View>{dayStreak>0?<View style={S.streakBadge}><Text style={S.streakValue}>{dayStreak}</Text><Text style={S.streakLabel}>JOURS</Text></View>:<Text style={S.arrow}>›</Text>}</View>
-  <Card style={S.hero}><View><Text style={S.eyebrow}>RESTE À MANGER</Text><Text style={S.heroNum}>{remaining}</Text><Text style={S.muted}>kcal • cible dynamique</Text></View><View style={S.glow}><Text style={{fontSize:32}}>🔥</Text></View></Card>
-  <View style={S.metrics}><Metric emoji="🔥" label="Calories" value={Math.round(total.calories)} target={targets.calories}/><Metric emoji="🥩" label="Protéines" value={Math.round(total.protein)} target={targets.protein} display={targets.protein+" g"}/><Metric emoji="🚶" label="Pas" value={stepValue} target={targets.steps} display={targets.steps>=1000?`${Math.round(targets.steps/100)/10}k`:targets.steps}/></View>
-  <Card><View style={S.cardHead}><Text style={S.section}>🧠 Décision du jour</Text><Text style={[S.ai,coachSource&&coachSource!=="ai"&&S.aiWarn]}>{coachSource==="ai"?"COACH IA":coachSource?"HORS LIGNE":"ADAPTATIF"}</Text></View>
+  <Card glow tint={GR.calories} bodyStyle={S.hero}>
+      <View style={{flex:1}}><Text style={S.eyebrow}>RESTE À MANGER</Text><Text style={S.heroNum}>{remaining}</Text><Text style={S.muted}>kcal • cible dynamique</Text>
+        <Progress value={total.calories} target={targets.calories} colors={GR.barWarm} showPct/></View>
+      <View style={S.heroOrb}><Orb size={72} colors={GR.blob}/><View style={S.heroFlame}><Icon name="flame" size={26} color={P.ink}/></View></View>
+    </Card>
+  <View style={S.metrics}>
+      <Metric icon="protein" iconColor={P.pinkSoft} label="Protéines" value={Math.round(total.protein)} target={targets.protein} display={targets.protein+" g"} tint={GR.protein} bar={GR.barPink}/>
+      <Metric icon="steps" iconColor={P.cyan} label="Pas" value={stepValue} target={targets.steps} display={targets.steps>=1000?`${Math.round(targets.steps/100)/10}k`:targets.steps} tint={GR.steps} bar={GR.barCyan}/>
+      <Metric icon="sleep" iconColor={P.violetSoft} label="Sommeil" value={health.sleepMin?`${Math.floor(health.sleepMin/60)}h${String(health.sleepMin%60).padStart(2,"0")}`:"—"} display={`${Math.floor(targets.sleepMin/60)}h${String(targets.sleepMin%60).padStart(2,"0")}`} ratioValue={health.sleepMin||0} ratioTarget={targets.sleepMin} tint={GR.sleep} bar={GR.barViolet}/>
+      <Metric icon="water" iconColor={P.cyan} label="Hydratation" value={fr((water/1000).toFixed(1))} display={`${fr((waterTarget/1000).toFixed(1))} L`} ratioValue={water} ratioTarget={waterTarget} tint={GR.water} bar={GR.barCyan}/>
+    </View>
+  <Card><View style={S.cardHead}><View style={S.headLeft}><Icon name="brain" size={18} color={P.pinkSoft}/><Text style={S.section}>Décision du jour</Text></View><Text style={[S.ai,coachSource&&coachSource!=="ai"&&S.aiWarn]}>{coachSource==="ai"?"COACH IA":coachSource?"HORS LIGNE":"ADAPTATIF"}</Text></View>
       <Text style={S.coach}>{coach}</Text>
       <Text style={S.muted}>{coachLoading?"Analyse en cours…":coachStatusLabel}</Text>
       <Button title={coachLoading?"Analyse…":"Analyser ma journée"} onPress={analyze}/></Card>
   <Card style={S.autopilot}>
-    <View style={S.cardHead}><Text style={S.section}>🧠 AUTOPILOT</Text><Text style={S.ai}>3 PRIORITÉS</Text></View>
+    <View style={S.cardHead}><View style={S.headLeft}><Icon name="sparkle" size={18} color={P.violetSoft}/><Text style={S.section}>AUTOPILOT</Text></View><Text style={S.ai}>3 PRIORITÉS</Text></View>
     {autopilotActions.map((a,i)=><View key={i} style={S.actionRow}><Text style={S.actionNum}>{i+1}</Text><Text style={S.text}>{a}</Text></View>)}
     <Button title="Planifier ma semaine" onPress={()=>{generateWeek();setTab("program")}} secondary/>
   </Card>
-  <Card><View style={S.cardHead}><Text style={S.section}>😴 Récupération</Text><Text style={S.ai}>{recovery}/100</Text></View><Progress value={recovery} target={100}/><Text style={S.text}>{health.sleepMin?`${Math.floor(health.sleepMin/60)}h${String(health.sleepMin%60).padStart(2,"0")}`:"Sommeil non renseigné"} • qualité {quality}/5</Text><Text style={S.muted}>{recovery>=70?"Récupération compatible avec une progression de charge.":recovery>=45?"Récupération moyenne : consolide plutôt que d'augmenter.":"Récupération basse : réduis le volume aujourd'hui."}</Text></Card>
-    <Card><Text style={S.section}>🚶 Pas du jour</Text><Field label="Nombre de pas" value={String(stepValue||"")} onChange={setStepCount} keyboardType="numeric"/><Progress value={stepValue} target={targets.steps}/><Text style={S.muted}>Saisis tes pas (ou connecte Apple Santé dans une build native) pour que l'Autopilot arrête de les réclamer.</Text></Card>
-  <Card style={S.workout}><Text style={S.section}>{jjb?"🥋 MMA / JJB":"🏋️ Séance du jour"}</Text><Text style={S.workoutTitle}>{jjb?"Technique + sparring":`${todayWorkout().emoji} ${todayWorkout().name}`}</Text><Text style={S.muted}>{todayWorkout().subtitle} • {gym?"Séance activée":"À planifier"}</Text><Button title="Voir le programme" onPress={()=>setTab("program")} secondary/></Card>
-  <Card><Text style={S.section}>🎯 Mode « journée difficile »</Text><Text style={S.muted}>Si tu es KO, active le mode récupération dans Programme : volume réduit, objectifs essentiels conservés.</Text></Card>
-  <Card><Text style={S.section}>💧 Hydratation</Text><Text style={S.text}>{water} / {waterTarget} ml</Text><Progress value={water} target={waterTarget}/><Field label="Quantité exacte (ml)" value={String(water)} onChange={setWaterAmount} keyboardType="numeric"/><View style={S.quickRow}><Button title="−250 ml" onPress={()=>setWaterAmount(water-250)} secondary/><Button title="+250 ml" onPress={()=>addWater(250)}/><Button title="+500 ml" onPress={()=>addWater(500)}/></View></Card>
-  <Card><Text style={S.section}>☕ Caféine</Text><Text style={S.muted}>Le coach peut repérer si la caféine tardive coïncide avec un sommeil moins bon.</Text><View style={S.switchLine}><Text style={S.text}>Caféine après 16h</Text><Switch value={caffeine} onValueChange={setCaffeine} trackColor={{false:P.surfaceHigh,true:P.limeDeep}} thumbColor={caffeine?P.lime:P.inkMuted} ios_backgroundColor={P.surfaceHigh}/></View></Card>
-  <Text style={S.section}>📅 Calendrier</Text><View style={S.timeline}>{["1–16 Sep","17–20 🇹🇳","Oct–Déc 🥋","Jan 🎓","Fév+ 💪"].map((x,i)=><View key={x} style={[S.timelineItem,(phase.key==="travel"&&i===1)||(phase.key==="internship"&&i===2)||(phase.key==="school"&&i===3)||(phase.key==="free"&&i===4)||(phase.key==="september"&&i===0)?S.timelineActive:null]}><Text style={S.timelineText}>{x}</Text></View>)}</View>
+  <Card><View style={S.cardHead}><View style={S.headLeft}><Icon name="battery" size={18} color={P.cyan}/><Text style={S.section}>Récupération</Text></View><Text style={S.ai}>{recovery}/100</Text></View><Progress value={recovery} target={100}/><Text style={S.text}>{health.sleepMin?`${Math.floor(health.sleepMin/60)}h${String(health.sleepMin%60).padStart(2,"0")}`:"Sommeil non renseigné"} • qualité {quality}/5</Text><Text style={S.muted}>{recovery>=70?"Récupération compatible avec une progression de charge.":recovery>=45?"Récupération moyenne : consolide plutôt que d'augmenter.":"Récupération basse : réduis le volume aujourd'hui."}</Text></Card>
+    <Card><View style={S.headLeft}><Icon name="steps" size={18} color={P.cyan}/><Text style={S.section}>Pas du jour</Text></View><Field label="Nombre de pas" value={String(stepValue||"")} onChange={setStepCount} keyboardType="numeric"/><Progress value={stepValue} target={targets.steps}/><Text style={S.muted}>Saisis tes pas (ou connecte Apple Santé dans une build native) pour que l'Autopilot arrête de les réclamer.</Text></Card>
+  <Card style={S.workout}><View style={S.headLeft}><Icon name="program" size={18} color={P.violetSoft}/><Text style={S.section}>{jjb?"MMA / JJB":"Séance du jour"}</Text></View><Text style={S.workoutTitle}>{jjb?"Technique + sparring":`${todayWorkout().emoji} ${todayWorkout().name}`}</Text><Text style={S.muted}>{todayWorkout().subtitle} • {gym?"Séance activée":"À planifier"}</Text><Button title="Voir le programme" onPress={()=>setTab("program")} secondary/></Card>
+  <Card><View style={S.headLeft}><Icon name="alert" size={18} color={P.warn}/><Text style={S.section}>Mode « journée difficile »</Text></View><Text style={S.muted}>Si tu es KO, active le mode récupération dans Programme : volume réduit, objectifs essentiels conservés.</Text></Card>
+  <Card><View style={S.headLeft}><Icon name="water" size={18} color={P.cyan}/><Text style={S.section}>Hydratation</Text></View><Text style={S.text}>{water} / {waterTarget} ml</Text><Progress value={water} target={waterTarget}/><Field label="Quantité exacte (ml)" value={String(water)} onChange={setWaterAmount} keyboardType="numeric"/><View style={S.quickRow}><Button title="−250 ml" onPress={()=>setWaterAmount(water-250)} secondary/><Button title="+250 ml" onPress={()=>addWater(250)}/><Button title="+500 ml" onPress={()=>addWater(500)}/></View></Card>
+  <Card><View style={S.headLeft}><Icon name="clock" size={18} color={P.warn}/><Text style={S.section}>Caféine</Text></View><Text style={S.muted}>Le coach peut repérer si la caféine tardive coïncide avec un sommeil moins bon.</Text><View style={S.switchLine}><Text style={S.text}>Caféine après 16h</Text><Switch value={caffeine} onValueChange={setCaffeine} trackColor={{false:P.surfaceHigh,true:P.limeDeep}} thumbColor={caffeine?P.lime:P.inkMuted} ios_backgroundColor={P.surfaceHigh}/></View></Card>
+  <View style={S.headLeft}><Icon name="clock" size={18} color={P.inkMuted}/><Text style={S.section}>Calendrier</Text></View><View style={S.timeline}>{["1–16 Sep","17–20 🇹🇳","Oct–Déc 🥋","Jan 🎓","Fév+ 💪"].map((x,i)=><View key={x} style={[S.timelineItem,(phase.key==="travel"&&i===1)||(phase.key==="internship"&&i===2)||(phase.key==="school"&&i===3)||(phase.key==="free"&&i===4)||(phase.key==="september"&&i===0)?S.timelineActive:null]}><Text style={S.timelineText}>{x}</Text></View>)}</View>
 </ScrollView>}
 
 function Nutrition({app}){
 const {foodDraft,setFoodDraft,restaurantChoice,photoMeal,photo,setPhoto,restaurantMode,remaining,pRemain,budget,changeBudget,targets,generateGroceries,groceryList,groceryChecked,toggleGrocery,clearGroceries,dynamicCarbs,total,addLog}=app;
 const f=foodDraft,setF=setFoodDraft;return <ScrollView key="nutrition" contentContainerStyle={S.content}>
-  <Text style={S.title}>🍽️ Nutrition</Text><Text style={S.muted}>Le coach te dit quoi manger maintenant.</Text><Button title="🍽️ Je mange au restaurant" onPress={restaurantChoice} secondary/>
+  <Text style={S.title}>Nutrition</Text><Text style={S.muted}>Le coach te dit quoi manger maintenant.</Text><Button icon="nutrition" title="Je mange au restaurant" onPress={restaurantChoice} secondary/>
   <Pressable style={S.photoBox} onPress={photoMeal}>{photo?<Image source={{uri:photo}} style={S.photo}/>:<><Text style={{fontSize:40}}>📸</Text><Text style={S.photoTitle}>Photographier mon repas</Text><Text style={S.muted}>Analyse IA • calories • macros • confiance</Text></>}</Pressable>
-  {restaurantMode&&<Card><Text style={S.section}>🍔 Mode restaurant</Text><Text style={S.text}>Choisis ce que tu veux manger. L’objectif est d’estimer puis d’adapter le reste de la journée, pas de culpabiliser.</Text><Button title="Voir mes choix" onPress={()=>Alert.alert("Choix","Poulet + riz • Steak + pommes de terre • Burger : choisis selon tes envies et le budget restant.")}/></Card>}{photo&&<Card><Text style={S.section}>🤖 Analyse IA</Text><Text style={S.text}>Photo prête à envoyer au serveur sécurisé.</Text><Button title="Analyser le repas" onPress={()=>Alert.alert("IA","Connecte le serveur IA pour l'analyse vision réelle.")}/><Button title="Supprimer" secondary onPress={()=>setPhoto(null)}/></Card>}
-  <Card><Text style={S.section}>🍴 Qu'est-ce que je mange maintenant ?</Text><Text style={S.text}>Tu as {remaining} kcal et {pRemain} g de protéines à couvrir.</Text><View style={S.option}><Text style={S.text}>🥣 Skyr + banane + avoine</Text><Text style={S.muted}>≈ 430 kcal • 28 P</Text></View><View style={S.option}><Text style={S.text}>🍗 Poulet + riz + légumes</Text><Text style={S.muted}>≈ 620 kcal • 48 P</Text></View><View style={S.option}><Text style={S.text}>🥛 Shake + banane</Text><Text style={S.muted}>≈ 390 kcal • 30 P</Text></View></Card>
-  <Card><Text style={S.section}>🍕 J’ai fait un écart</Text><Text style={S.muted}>Aucune compensation extrême. On reprend simplement le plan normal au prochain repas.</Text><Button title="Revenir au plan" onPress={()=>Alert.alert("C’est bon","Pas besoin de compenser. Reprends simplement tes objectifs habituels.")} secondary/></Card><Card><View style={S.cardHead}><Text style={S.section}>🛒 Liste de courses</Text>{groceryList&&<Text style={S.ai}>{groceryChecked.length}/{groceryList.items.length}</Text>}</View>
+  {restaurantMode&&<Card><View style={S.headLeft}><Icon name="nutrition" size={18} color={P.warn}/><Text style={S.section}>Mode restaurant</Text></View><Text style={S.text}>Choisis ce que tu veux manger. L’objectif est d’estimer puis d’adapter le reste de la journée, pas de culpabiliser.</Text><Button title="Voir mes choix" onPress={()=>Alert.alert("Choix","Poulet + riz • Steak + pommes de terre • Burger : choisis selon tes envies et le budget restant.")}/></Card>}{photo&&<Card><View style={S.headLeft}><Icon name="sparkle" size={18} color={P.violetSoft}/><Text style={S.section}>Analyse IA</Text></View><Text style={S.text}>Photo prête à envoyer au serveur sécurisé.</Text><Button title="Analyser le repas" onPress={()=>Alert.alert("IA","Connecte le serveur IA pour l'analyse vision réelle.")}/><Button title="Supprimer" secondary onPress={()=>setPhoto(null)}/></Card>}
+  <Card><View style={S.headLeft}><Icon name="nutrition" size={18} color={P.pinkSoft}/><Text style={S.section}>Qu'est-ce que je mange maintenant ?</Text></View><Text style={S.text}>Tu as {remaining} kcal et {pRemain} g de protéines à couvrir.</Text><View style={S.option}><Text style={S.text}>🥣 Skyr + banane + avoine</Text><Text style={S.muted}>≈ 430 kcal • 28 P</Text></View><View style={S.option}><Text style={S.text}>🍗 Poulet + riz + légumes</Text><Text style={S.muted}>≈ 620 kcal • 48 P</Text></View><View style={S.option}><Text style={S.text}>🥛 Shake + banane</Text><Text style={S.muted}>≈ 390 kcal • 30 P</Text></View></Card>
+  <Card><View style={S.headLeft}><Icon name="heart" size={18} color={P.pinkSoft}/><Text style={S.section}>J’ai fait un écart</Text></View><Text style={S.muted}>Aucune compensation extrême. On reprend simplement le plan normal au prochain repas.</Text><Button title="Revenir au plan" onPress={()=>Alert.alert("C’est bon","Pas besoin de compenser. Reprends simplement tes objectifs habituels.")} secondary/></Card><Card><View style={S.cardHead}><View style={S.headLeft}><Icon name="cart" size={18} color={P.cyan}/><Text style={S.section}>Liste de courses</Text></View>{groceryList&&<Text style={S.ai}>{groceryChecked.length}/{groceryList.items.length}</Text>}</View>
       <Field label="Budget hebdomadaire (€)" value={budget} onChange={changeBudget} keyboardType="decimal-pad"/>
       <Text style={S.muted}>Calculée pour 7 jours à partir de {targets.calories} kcal et {targets.protein} g de protéines par jour.</Text>
       <Button title={groceryList?"Recalculer ma liste":"Calculer ma liste de courses"} onPress={generateGroceries}/>
@@ -214,22 +271,22 @@ const f=foodDraft,setF=setFoodDraft;return <ScrollView key="nutrition" contentCo
         <Text style={S.muted}>{groceryList.remaining>2?`Il te reste ${fr(groceryList.remaining.toFixed(2))} € : acheter davantage reviendrait à manger au-delà de tes besoins.`:"Budget utilisé au maximum utile."} Prix indicatifs, à ajuster selon ton magasin.</Text>
         <Button title="Vider la liste" onPress={clearGroceries} secondary/>
       </View>}</Card>
-  <Card><Text style={S.section}>🔥 Macros dynamiques</Text><Text style={S.text}>{remaining} kcal • {pRemain} g protéines • {Math.max(0,dynamicCarbs-total.carbs)} g glucides</Text></Card>
+  <Card><View style={S.headLeft}><Icon name="flame" size={18} color={P.crimson}/><Text style={S.section}>Macros dynamiques</Text></View><Text style={S.text}>{remaining} kcal • {pRemain} g protéines • {Math.max(0,dynamicCarbs-total.carbs)} g glucides</Text></Card>
   <Card><Text style={S.section}>Ajouter manuellement</Text><Field label="Repas" value={f.name} onChange={v=>setF({...f,name:v})}/><Field label="Calories" value={f.calories} onChange={v=>setF({...f,calories:v})} keyboardType="numeric"/><Field label="Protéines" value={f.protein} onChange={v=>setF({...f,protein:v})} keyboardType="numeric"/><Field label="Glucides" value={f.carbs} onChange={v=>setF({...f,carbs:v})} keyboardType="numeric"/><Field label="Lipides" value={f.fat} onChange={v=>setF({...f,fat:v})} keyboardType="numeric"/><Button title="+ Ajouter" onPress={async()=>{if(!f.name||!f.calories)return;await addLog(f);setF({name:"",calories:"",protein:"",carbs:"",fat:""})}}/></Card>
 </ScrollView>}
 
 function ProgressPage({app}){
 const {currentWeight,weight,setWeight,saveWeight,sleep,setSleep,wake,setWake,quality,setQuality,saveSleep,weekly,weeklyAnalysis,plateau,sleepAdvice,dayStreak,journal}=app;
-return <ScrollView key="progress" contentContainerStyle={S.content}><Text style={S.title}>📈 Progression</Text>
-  <Card><Text style={S.section}>⚖️ Poids</Text><Text style={S.weight}>{currentWeight} <Text style={S.kg}>kg</Text></Text><Text style={S.good}>Objectif : +0,15 à +0,30 kg/semaine</Text><WeightChart series={weightSeries(journal)}/><Field label="Poids actuel" value={weight} onChange={setWeight} keyboardType="decimal-pad"/><Button title="Enregistrer" onPress={saveWeight}/></Card>
-  <Card><Text style={S.section}>😴 Sommeil</Text><Field label="Coucher" value={sleep} onChange={setSleep}/><Field label="Réveil" value={wake} onChange={setWake}/><Field label="Qualité 1–5" value={quality} onChange={setQuality} keyboardType="numeric"/><Button title="Enregistrer" onPress={saveSleep}/></Card>
-  <Card style={plateau.detected?S.alertCard:null}><View style={S.cardHead}><Text style={S.section}>⚠️ Détection de plateau</Text><Text style={S.ai}>{plateau.reason?"EN ATTENTE":plateau.detected?"PLATEAU":"OK"}</Text></View>
+return <ScrollView key="progress" contentContainerStyle={S.content}><Text style={S.title}>Progression</Text>
+  <Card><View style={S.headLeft}><Icon name="scale" size={18} color={P.cyan}/><Text style={S.section}>Poids</Text></View><Text style={S.weight}>{currentWeight} <Text style={S.kg}>kg</Text></Text><Text style={S.good}>Objectif : +0,15 à +0,30 kg/semaine</Text><WeightChart series={weightSeries(journal)}/><Field label="Poids actuel" value={weight} onChange={setWeight} keyboardType="decimal-pad"/><Button title="Enregistrer" onPress={saveWeight}/></Card>
+  <Card><View style={S.headLeft}><Icon name="sleep" size={18} color={P.violetSoft}/><Text style={S.section}>Sommeil</Text></View><Field label="Coucher" value={sleep} onChange={setSleep}/><Field label="Réveil" value={wake} onChange={setWake}/><Field label="Qualité 1–5" value={quality} onChange={setQuality} keyboardType="numeric"/><Button title="Enregistrer" onPress={saveSleep}/></Card>
+  <Card style={plateau.detected?S.alertCard:null}><View style={S.cardHead}><View style={S.headLeft}><Icon name="alert" size={18} color={P.warn}/><Text style={S.section}>Détection de plateau</Text></View><Text style={S.ai}>{plateau.reason?"EN ATTENTE":plateau.detected?"PLATEAU":"OK"}</Text></View>
     {plateau.reason?<Text style={S.text}>Il faut au moins 14 jours de pesées pour conclure. Tu en as {weightSeries(journal).length}.</Text>
       :plateau.detected?<><Text style={S.text}>Ton poids moyen stagne ({plateau.deltaKgPerWeek>=0?"+":""}{fr(plateau.deltaKgPerWeek.toFixed(2))} kg/semaine).</Text><Text style={S.reason}>Adaptation proposée : +{plateau.suggestedCalories} kcal par jour, à tenir une semaine avant de réévaluer.</Text></>
       :<Text style={S.text}>Progression normale : {plateau.deltaKgPerWeek>=0?"+":""}{fr(plateau.deltaKgPerWeek.toFixed(2))} kg/semaine. Aucune adaptation nécessaire.</Text>}
   </Card>
-  <Card><View style={S.cardHead}><Text style={S.section}>😴 Dette de sommeil</Text><Text style={S.ai}>{sleepAdvice.urgency==="high"?"URGENT":"OK"}</Text></View><Text style={S.text}>{sleepAdvice.message}</Text><Text style={S.muted}>Objectif calculé : {Math.floor(sleepAdvice.desiredSleepMin/60)}h{String(sleepAdvice.desiredSleepMin%60).padStart(2,"0")} • {journal.filter(hasSleep).length} nuit(s) enregistrée(s).</Text></Card>
-  <Card><View style={S.cardHead}><Text style={S.section}>🏆 Score de la semaine</Text><Text style={S.ai}>{weekly.sampleDays?`${weekly.sampleDays} J`:"—"}</Text></View><Text style={S.score}>{weekly.score || "—"}<Text style={S.kg}>/100</Text></Text>
+  <Card><View style={S.cardHead}><View style={S.headLeft}><Icon name="sleep" size={18} color={P.violetSoft}/><Text style={S.section}>Dette de sommeil</Text></View><Text style={S.ai}>{sleepAdvice.urgency==="high"?"URGENT":"OK"}</Text></View><Text style={S.text}>{sleepAdvice.message}</Text><Text style={S.muted}>Objectif calculé : {Math.floor(sleepAdvice.desiredSleepMin/60)}h{String(sleepAdvice.desiredSleepMin%60).padStart(2,"0")} • {journal.filter(hasSleep).length} nuit(s) enregistrée(s).</Text></Card>
+  <Card><View style={S.cardHead}><View style={S.headLeft}><Icon name="sparkle" size={18} color={P.cyan}/><Text style={S.section}>Score de la semaine</Text></View><Text style={S.ai}>{weekly.sampleDays?`${weekly.sampleDays} J`:"—"}</Text></View><Text style={S.score}>{weekly.score || "—"}<Text style={S.kg}>/100</Text></Text>
     <Text style={S.text}>Calories moyennes : {weekly.avgCalories||"—"} kcal</Text>
     <Text style={S.text}>Protéines moyennes : {weekly.avgProtein||"—"} g</Text>
     <Text style={S.text}>Pas moyens : {weekly.avgSteps||"—"}</Text>
@@ -252,7 +309,7 @@ const field=key=>String(draft?.[key]??"");
 function openEditor(){setDraft({...targets})}
 async function saveManualTargets(){await saveTargets(draft);setDraft(null);Alert.alert("Objectifs enregistrés","Tes chiffres remplacent le calcul automatique jusqu'à ta prochaine mise à jour de mesures.")}
 const goalLabel=profile?goalLabelFor(profile.goal):"Objectifs manuels";
-return <ScrollView key="profile" contentContainerStyle={S.content} keyboardShouldPersistTaps="handled"><Text style={S.title}>⚙️ Profil</Text>
+return <ScrollView key="profile" contentContainerStyle={S.content} keyboardShouldPersistTaps="handled"><Text style={S.title}>Profil</Text>
   <Card><View style={S.cardHead}><Text style={S.section}>Tes bases</Text><Text style={S.ai}>{goalLabel.toUpperCase()}</Text></View>
     {profile
       ? <><Text style={S.text}>{(profile.heightCm/100).toFixed(2).replace(".",",")} m • {profile.weight} kg • {profile.age} ans</Text>
@@ -294,16 +351,16 @@ return <ScrollView key="profile" contentContainerStyle={S.content} keyboardShoul
       <Button title="Annuler" onPress={()=>setDraft(null)} secondary/>
     </View>}
   </Card>
-  {computed&&computed.bmr>0&&<Card><Text style={S.section}>🧮 D'où viennent tes objectifs</Text>
+  {computed&&computed.bmr>0&&<Card><View style={S.headLeft}><Icon name="calculator" size={18} color={P.violetSoft}/><Text style={S.section}>D'où viennent tes objectifs</Text></View>
     <View style={S.recapRow}><Text style={S.recapLabel}>Métabolisme de base</Text><Text style={S.recapValue}>{computed.bmr} kcal</Text></View>
     <View style={S.recapRow}><Text style={S.recapLabel}>Maintenance estimée</Text><Text style={S.recapValue}>{computed.maintenance} kcal</Text></View>
     {computed.rationale.map((r,i)=><View key={i} style={S.priorityRow}><Text style={S.check}>·</Text><Text style={S.muted}>{r}</Text></View>)}
     {targets.calories!==computed.calories&&<Text style={S.restFoot}>Tes objectifs sont ajustés à la main ({targets.calories} kcal au lieu de {computed.calories} kcal calculées).</Text>}
   </Card>}
-  <Card><View style={S.cardHead}><Text style={S.section}>🔋 Récupération actuelle</Text><Text style={S.ai}>{recovery}/100</Text></View><Progress value={recovery} target={100}/><Text style={S.muted}>Calculée à partir du sommeil, de la nutrition, de l'hydratation et des séances.</Text></Card>
-  <Card><View style={S.switchLine}><View><Text style={S.section}>🔔 Notifications intelligentes</Text><Text style={S.muted}>Repas • entraînement • sommeil</Text></View><Switch value={notifications} onValueChange={scheduleNotifications} trackColor={{false:P.surfaceHigh,true:P.limeDeep}} thumbColor={notifications?P.lime:P.inkMuted} ios_backgroundColor={P.surfaceHigh}/></View></Card>
-  <Card><View style={S.cardHead}><Text style={S.section}>❤️ Apple Santé</Text><Text style={S.ai}>{FEATURES.healthKit?"ACTIF":"HORS LIGNE"}</Text></View><Text style={S.text}>Pas • sommeil • poids • énergie active</Text><Text style={S.muted}>{FEATURES.healthKit?"Les données confirmées par HealthKit sont prioritaires sur les estimations.":"HealthKit s'active dans une development build iOS. En attendant, saisis tes pas et ton sommeil à la main : rien n'est inventé."}</Text></Card>
-  <Card><Text style={S.section}>🔐 Confidentialité</Text><Text style={S.muted}>La clé IA reste sur le serveur. L'application ne doit jamais embarquer OPENROUTER_API_KEY.</Text></Card>
+  <Card><View style={S.cardHead}><View style={S.headLeft}><Icon name="battery" size={18} color={P.cyan}/><Text style={S.section}>Récupération actuelle</Text></View><Text style={S.ai}>{recovery}/100</Text></View><Progress value={recovery} target={100}/><Text style={S.muted}>Calculée à partir du sommeil, de la nutrition, de l'hydratation et des séances.</Text></Card>
+  <Card><View style={S.switchLine}><View><View style={S.headLeft}><Icon name="bell" size={18} color={P.warn}/><Text style={S.section}>Notifications intelligentes</Text></View><Text style={S.muted}>Repas • entraînement • sommeil</Text></View><Switch value={notifications} onValueChange={scheduleNotifications} trackColor={{false:P.surfaceHigh,true:P.limeDeep}} thumbColor={notifications?P.lime:P.inkMuted} ios_backgroundColor={P.surfaceHigh}/></View></Card>
+  <Card><View style={S.cardHead}><View style={S.headLeft}><Icon name="heart" size={18} color={P.pink}/><Text style={S.section}>Apple Santé</Text></View><Text style={S.ai}>{FEATURES.healthKit?"ACTIF":"HORS LIGNE"}</Text></View><Text style={S.text}>Pas • sommeil • poids • énergie active</Text><Text style={S.muted}>{FEATURES.healthKit?"Les données confirmées par HealthKit sont prioritaires sur les estimations.":"HealthKit s'active dans une development build iOS. En attendant, saisis tes pas et ton sommeil à la main : rien n'est inventé."}</Text></Card>
+  <Card><View style={S.headLeft}><Icon name="lock" size={18} color={P.inkMuted}/><Text style={S.section}>Confidentialité</Text></View><Text style={S.muted}>La clé IA reste sur le serveur. L'application ne doit jamais embarquer OPENROUTER_API_KEY.</Text></Card>
 </ScrollView>}
 
 export default function App(){
@@ -637,219 +694,231 @@ export default function App(){
     progress:<ProgressPage app={app}/>,
     profile:<Profile app={app}/>
   };
-  return <SafeAreaView style={S.safe}><StatusBar style="light"/>{pages[tab]}<View style={S.navWrap} pointerEvents="box-none"><View style={S.bottom}>{[["home","🏠","Accueil"],["nutrition","🍽️","Nutrition"],["program","🏋️","Programme"],["progress","📈","Progrès"],["profile","⚙️","Profil"]].map(([id,ic,l])=><Pressable accessibilityRole="tab" accessibilityState={{selected:tab===id}} key={id} onPress={()=>setTab(id)} style={({pressed})=>[S.nav,tab===id&&S.navActive,pressed&&S.buttonPressed]}><Text style={[S.navIcon,tab===id&&S.navIconActive]}>{ic}</Text><Text style={[S.navText,tab===id&&S.navTextActive]} numberOfLines={1}>{l}</Text></Pressable>)}</View></View></SafeAreaView>
+  return <SafeAreaView style={S.safe}><StatusBar style="light"/><Aura/>{pages[tab]}<View style={S.navWrap} pointerEvents="box-none"><View style={S.bottom}>{[["home","home","Accueil"],["nutrition","nutrition","Nutrition"],["program","program","Programme"],["progress","progress","Progrès"],["profile","profile","Profil"]].map(([id,ic,l])=><Pressable accessibilityRole="tab" accessibilityLabel={l} accessibilityState={{selected:tab===id}} key={id} onPress={()=>setTab(id)} style={({pressed})=>[S.nav,tab===id&&S.navActive,pressed&&S.buttonPressed]}><Icon name={ic} size={21} color={tab===id?P.blueSoft:P.inkFaint}/><Text style={[S.navText,tab===id&&S.navTextActive]} numberOfLines={1}>{l}</Text></Pressable>)}</View></View></SafeAreaView>
 }
 
 const S=StyleSheet.create({
   // ---------- Charpente ----------
-  safe:{flex:1,backgroundColor:P.bg},
+  safe:{flex:1,backgroundColor:P.void},
   pageScroll:{flex:1},
   content:{width:"100%",maxWidth:LAYOUT.maxContentWidth,alignSelf:"center",paddingHorizontal:SP.lg,paddingTop:SP.lg,paddingBottom:LAYOUT.navHeight+SP.xxxl},
 
+  // ---------- Halos d'ambiance ----------
+  aura:{position:"absolute",top:0,left:0,right:0,bottom:0,overflow:"hidden"},
+  blob:{position:"absolute",borderRadius:999,opacity:.5,...blurStyle(90)},
+  blobTop:{width:420,height:420,top:-170,right:-160,backgroundColor:P.auraBlue},
+  blobBottom:{width:480,height:480,bottom:-200,right:-140,backgroundColor:P.auraViolet},
+  blobMid:{width:340,height:340,top:"38%",left:-190,backgroundColor:P.auraPink,opacity:.32,...blurStyle(110)},
+
   // ---------- En-tête ----------
-  header:{flexDirection:"row",alignItems:"flex-start",justifyContent:"space-between",gap:SP.md,marginBottom:SP.lg},
-  eyebrow:{...T.eyebrow,color:P.lime,marginBottom:SP.xs},
+  header:{flexDirection:"row",alignItems:"flex-start",justifyContent:"space-between",gap:SP.md,marginBottom:SP.xl},
+  eyebrow:{...T.eyebrow,color:P.blueSoft,marginBottom:SP.xs},
   title:{...T.title,color:P.ink,marginBottom:SP.xs},
-  avatar:{width:46,height:46,borderRadius:RD.md,backgroundColor:P.limeDark,borderWidth:1,borderColor:P.limeDeep,alignItems:"center",justifyContent:"center"},
-  avatarText:{fontFamily:F.cond,fontSize:22,fontWeight:"700",color:P.lime},
+  avatar:{width:46,height:46,borderRadius:RD.md,alignItems:"center",justifyContent:"center",overflow:"hidden",borderWidth:1,borderColor:GL.border},
+  avatarText:{fontFamily:F.sans,fontSize:19,fontWeight:"800",color:P.ink},
 
   // ---------- Bandeau de phase ----------
-  phase:{flexDirection:"row",alignItems:"center",gap:SP.md,backgroundColor:P.surface,borderWidth:1,borderColor:P.line,borderRadius:RD.lg,padding:SP.md,marginBottom:SP.lg},
+  phase:{...glassStyle(14),flexDirection:"row",alignItems:"center",gap:SP.md,backgroundColor:GL.fill,borderWidth:1,borderColor:GL.border,borderRadius:RD.lg,padding:SP.md,marginBottom:SP.lg,overflow:"hidden"},
   phaseIcon:{fontSize:24},
   phaseTitle:{...T.section,color:P.ink},
   phaseSub:{...T.muted,color:P.inkMuted},
   arrow:{fontSize:24,color:P.inkFaint},
-  streakBadge:{alignItems:"center",justifyContent:"center",minWidth:52,paddingHorizontal:SP.sm,paddingVertical:SP.xs+2,borderRadius:RD.md,backgroundColor:P.limeDark,borderWidth:1,borderColor:P.limeDeep},
-  streakValue:{fontFamily:F.cond,fontSize:20,fontWeight:"700",color:P.lime,lineHeight:22},
-  streakLabel:{...T.label,fontSize:8,color:P.limeDeep},
+  streakBadge:{alignItems:"center",justifyContent:"center",minWidth:54,paddingHorizontal:SP.sm,paddingVertical:SP.xs+2,borderRadius:RD.md,backgroundColor:GL.fillStrong,borderWidth:1,borderColor:GL.border},
+  streakValue:{fontFamily:F.sans,fontSize:19,fontWeight:"800",color:P.cyan,lineHeight:22},
+  streakLabel:{...T.label,fontSize:8,letterSpacing:1,color:P.inkMuted},
 
-  // ---------- Cartes ----------
-  card:{backgroundColor:P.surface,borderWidth:1,borderColor:P.line,borderRadius:RD.xl,padding:SP.lg,marginBottom:SP.md,...SH.card},
+  // ---------- Cartes en verre ----------
+  card:{...glassStyle(16),borderRadius:RD.xl,borderWidth:1,borderColor:GL.border,marginBottom:SP.md,overflow:"hidden",backgroundColor:GL.fillSoft,...SH.card},
+  cardGlow:{borderColor:GL.borderBright,...SH.lift},
+  cardBody:{padding:SP.lg},
+  cardSheen:{position:"absolute",left:0,right:0,top:0,height:"50%"},
   cardHead:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",gap:SP.sm,marginBottom:SP.sm},
+  headLeft:{flexDirection:"row",alignItems:"center",gap:SP.sm,flex:1,minWidth:0},
+  rowCenter:{flexDirection:"row",alignItems:"center",gap:SP.xs+2},
   section:{...T.section,color:P.ink,flexShrink:1},
-  text:{...T.body,color:P.ink},
+  text:{...T.body,color:P.inkSoft},
   muted:{...T.muted,color:P.inkMuted},
   coach:{...T.body,fontSize:15,lineHeight:23,color:P.ink,marginBottom:SP.sm},
   reason:{...T.muted,color:P.inkMuted,marginTop:SP.sm},
-  ai:{...T.label,color:P.lime,backgroundColor:P.limeDark,borderWidth:1,borderColor:P.limeDeep,paddingHorizontal:SP.sm,paddingVertical:3,borderRadius:RD.pill,overflow:"hidden"},
-  alertCard:{borderColor:P.clay,backgroundColor:P.clayDark},
-  aiWarn:{color:P.amber,backgroundColor:P.amberDark,borderColor:P.amber},
+  ai:{...T.label,fontSize:9.5,color:P.cyan,backgroundColor:"rgba(85,208,252,0.12)",borderWidth:1,borderColor:"rgba(85,208,252,0.35)",paddingHorizontal:SP.sm,paddingVertical:3,borderRadius:RD.pill,overflow:"hidden"},
+  aiWarn:{color:P.warn,backgroundColor:"rgba(255,180,67,0.12)",borderColor:"rgba(255,180,67,0.4)"},
+  alertCard:{borderColor:"rgba(242,112,74,0.5)"},
 
   // ---------- Hero « reste à manger » ----------
-  hero:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",gap:SP.md,borderColor:P.lineStrong,backgroundColor:P.surfaceRaised,overflow:"hidden"},
-  heroNum:{...T.dataXl,color:P.lime,lineHeight:58},
-  glow:{width:64,height:64,borderRadius:RD.lg,alignItems:"center",justifyContent:"center",backgroundColor:P.limeDark,borderWidth:1,borderColor:P.limeDeep},
+  hero:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",gap:SP.md},
+  heroNum:{...T.dataXl,color:P.ink,lineHeight:50},
+  glow:{width:66,height:66,borderRadius:RD.lg,alignItems:"center",justifyContent:"center",backgroundColor:GL.fillStrong,borderWidth:1,borderColor:GL.border},
 
-  // ---------- Indicateurs ----------
-  metrics:{flexDirection:"row",flexWrap:"wrap",gap:SP.sm,marginBottom:SP.md},
-  metric:{flexGrow:1,flexBasis:0,minWidth:84,backgroundColor:P.surface,borderWidth:1,borderColor:P.line,borderRadius:RD.lg,paddingHorizontal:SP.sm,paddingVertical:SP.md,gap:2},
-  metricValue:{fontFamily:F.cond,fontSize:26,fontWeight:"700",color:P.ink,lineHeight:30},
-  metricTarget:{...T.muted,fontSize:11,color:P.inkFaint},
-  metricLabel:{...T.label,fontSize:9,letterSpacing:.4,color:P.inkMuted,marginBottom:SP.xs},
-  track:{height:5,borderRadius:RD.pill,backgroundColor:P.surfaceHigh,overflow:"hidden",marginTop:SP.xs},
-  fill:{height:"100%",borderRadius:RD.pill,backgroundColor:P.lime},
+  // ---------- Métriques en grille 2×2 ----------
+  metrics:{flexDirection:"row",flexWrap:"wrap",gap:SP.md,marginBottom:SP.md},
+  metric:{...glassStyle(16),flexGrow:1,flexBasis:"46%",minWidth:150,borderRadius:RD.lg,borderWidth:1,borderColor:GL.border,overflow:"hidden",backgroundColor:GL.fillSoft,...SH.card},
+  metricBody:{padding:SP.md,gap:SP.xs},
+  metricHead:{flexDirection:"row",alignItems:"center",gap:SP.sm},
+  heroOrb:{alignItems:"center",justifyContent:"center"},
+  heroFlame:{position:"absolute"},
+  metricLine:{flexDirection:"row",alignItems:"baseline",gap:SP.xs,flexWrap:"wrap"},
+  metricValue:{fontFamily:F.sans,fontSize:26,fontWeight:"800",letterSpacing:-.8,color:P.ink,lineHeight:31},
+  metricTarget:{...T.muted,fontSize:11.5,color:P.inkMuted},
+  metricLabel:{...T.body,fontSize:13,fontWeight:"600",color:P.inkSoft},
 
-  // ---------- Boutons ----------
-  button:{minHeight:LAYOUT.tapTarget,borderRadius:RD.lg,overflow:"hidden",marginTop:SP.md,borderWidth:1,borderColor:GL.edgeStrong,...SH.limeGlow},
-  buttonInner:{minHeight:LAYOUT.tapTarget,alignItems:"center",justifyContent:"center",paddingHorizontal:SP.lg,paddingVertical:SP.md},
-  buttonSheen:{position:"absolute",left:0,right:0,top:0,height:"56%"},
-  buttonText:{...T.button,color:P.inkInverse,textAlign:"center"},
-  button2:{backgroundColor:P.surfaceRaised,borderColor:P.lineStrong,...SH.none},
-  buttonText2:{...T.button,color:P.ink,textAlign:"center"},
-  buttonPressed:{transform:[{scale:.975}],opacity:.92},
+  // ---------- Progression ----------
+  progressRow:{flexDirection:"row",alignItems:"center",gap:SP.sm,marginTop:SP.xs},
+  track:{flex:1,height:7,borderRadius:RD.pill,backgroundColor:"rgba(255,255,255,0.10)",overflow:"hidden"},
+  fill:{height:"100%",borderRadius:RD.pill},
+  pct:{...T.label,fontSize:10,letterSpacing:0,textTransform:"none",color:P.inkMuted,minWidth:32,textAlign:"right"},
+
+  // ---------- Boutons liquides ----------
+  button:{minHeight:LAYOUT.tapTarget+4,borderRadius:RD.pill,overflow:"hidden",marginTop:SP.md,borderWidth:1,borderColor:GL.borderBright,...SH.glowBlue},
+  buttonInner:{minHeight:LAYOUT.tapTarget+4,flexDirection:"row",alignItems:"center",justifyContent:"center",paddingHorizontal:SP.xl,paddingVertical:SP.md},
+  buttonSheen:{position:"absolute",left:0,right:0,top:0,height:"52%"},
+  buttonText:{...T.button,color:P.ink,textAlign:"center"},
+  button2:{backgroundColor:GL.fill,borderColor:GL.border,...SH.none},
+  buttonText2:{...T.button,color:P.inkSoft,textAlign:"center"},
+  buttonPressed:{transform:[{scale:.975}],opacity:.9},
   quickRow:{flexDirection:"row",flexWrap:"wrap",gap:SP.sm,alignItems:"stretch"},
 
   // ---------- Autopilot ----------
-  autopilot:{borderColor:P.lineStrong,backgroundColor:P.surfaceRaised},
-  actionRow:{flexDirection:"row",gap:SP.md,alignItems:"flex-start",paddingVertical:SP.sm,borderTopWidth:1,borderTopColor:P.line},
-  actionNum:{fontFamily:F.cond,fontSize:16,fontWeight:"700",color:P.lime,minWidth:18},
+  autopilot:{borderColor:GL.borderBright},
+  actionRow:{flexDirection:"row",gap:SP.md,alignItems:"flex-start",paddingVertical:SP.sm,borderTopWidth:1,borderTopColor:GL.border},
+  actionNum:{fontFamily:F.sans,fontSize:15,fontWeight:"800",color:P.violetSoft,minWidth:18},
 
-  // ---------- Séance du jour ----------
-  workout:{borderColor:P.lineStrong},
-  workoutTitle:{fontFamily:F.cond,fontSize:24,fontWeight:"700",color:P.ink,lineHeight:28},
+  // ---------- Séance ----------
+  workout:{borderColor:GL.border},
+  workoutTitle:{fontFamily:F.sans,fontSize:23,fontWeight:"800",letterSpacing:-.6,color:P.ink,lineHeight:28},
 
   // ---------- Frise ----------
   timeline:{flexDirection:"row",flexWrap:"wrap",gap:SP.xs,marginBottom:SP.md},
-  timelineItem:{paddingHorizontal:SP.md,paddingVertical:SP.sm,borderRadius:RD.pill,backgroundColor:P.surface,borderWidth:1,borderColor:P.line},
-  timelineActive:{backgroundColor:P.limeDark,borderColor:P.limeDeep},
-  timelineText:{...T.label,fontSize:9,color:P.inkMuted},
+  timelineItem:{paddingHorizontal:SP.md,paddingVertical:SP.sm,borderRadius:RD.pill,backgroundColor:GL.fill,borderWidth:1,borderColor:GL.border},
+  timelineActive:{backgroundColor:"rgba(122,73,227,0.35)",borderColor:P.violetSoft},
+  timelineText:{...T.label,fontSize:9.5,color:P.inkMuted},
 
   // ---------- Formulaires ----------
-  label:{...T.label,color:P.inkMuted,marginBottom:SP.xs},
-  input:{minHeight:LAYOUT.tapTarget,backgroundColor:P.void,borderWidth:1,borderColor:P.lineStrong,borderRadius:RD.md,color:P.ink,paddingHorizontal:SP.md,paddingVertical:SP.md,fontFamily:F.sans,fontSize:15},
+  label:{...T.label,fontSize:10,color:P.inkMuted,marginBottom:SP.xs},
+  input:{minHeight:LAYOUT.tapTarget,backgroundColor:"rgba(255,255,255,0.05)",borderWidth:1,borderColor:GL.border,borderRadius:RD.md,color:P.ink,paddingHorizontal:SP.md,paddingVertical:SP.md,fontFamily:F.sans,fontSize:15,fontWeight:"600"},
   toggle:{flexDirection:"row",flexWrap:"wrap",gap:SP.sm,marginVertical:SP.md},
-  pill:{minHeight:38,justifyContent:"center",backgroundColor:P.surfaceHigh,borderWidth:1,borderColor:P.line,paddingHorizontal:SP.md,paddingVertical:SP.sm,borderRadius:RD.pill},
-  pillActive:{backgroundColor:P.limeDark,borderColor:P.lime},
-  pillText:{...T.label,fontSize:11,letterSpacing:.4,textTransform:"none",color:P.ink},
+  pill:{minHeight:40,justifyContent:"center",backgroundColor:GL.fill,borderWidth:1,borderColor:GL.border,paddingHorizontal:SP.lg,paddingVertical:SP.sm,borderRadius:RD.pill},
+  pillActive:{backgroundColor:"rgba(122,73,227,0.38)",borderColor:P.violetSoft},
+  pillText:{...T.label,fontSize:12,letterSpacing:0,textTransform:"none",color:P.inkSoft},
   switchLine:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",gap:SP.md},
-  option:{paddingVertical:SP.md,borderBottomWidth:1,borderBottomColor:P.line},
-  editBlock:{marginTop:SP.lg,paddingTop:SP.md,borderTopWidth:1,borderTopColor:P.line},
+  option:{paddingVertical:SP.md,borderBottomWidth:1,borderBottomColor:GL.border},
+  editBlock:{marginTop:SP.lg,paddingTop:SP.md,borderTopWidth:1,borderTopColor:GL.border},
+  choice:{flexDirection:"row",alignItems:"center",gap:SP.md,minHeight:LAYOUT.tapTarget+14,padding:SP.md,borderRadius:RD.lg,backgroundColor:GL.fill,borderWidth:1,borderColor:GL.border},
+  choiceActive:{backgroundColor:"rgba(122,73,227,0.32)",borderColor:P.violetSoft},
+  choiceTitle:{...T.section,fontSize:15,color:P.ink},
+  radio:{width:22,height:22,borderRadius:RD.pill,borderWidth:2,borderColor:GL.border},
+  radioOn:{borderColor:P.violetSoft,backgroundColor:P.violet},
+  recapRow:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",gap:SP.md,paddingVertical:SP.md,borderBottomWidth:1,borderBottomColor:GL.border},
+  recapLabel:{...T.label,fontSize:10,color:P.inkMuted},
+  recapValue:{fontFamily:F.sans,fontSize:20,fontWeight:"800",letterSpacing:-.5,color:P.cyan},
 
   // ---------- Programme ----------
   programHeader:{flexDirection:"row",alignItems:"flex-start",justifyContent:"space-between",gap:SP.md},
-  weekBadge:{alignItems:"center",justifyContent:"center",minWidth:64,paddingHorizontal:SP.md,paddingVertical:SP.sm,borderRadius:RD.md,backgroundColor:P.surfaceRaised,borderWidth:1,borderColor:P.lineStrong},
-  weekBadgeLabel:{...T.label,fontSize:8,color:P.inkFaint},
-  weekBadgeValue:{fontFamily:F.cond,fontSize:22,fontWeight:"700",color:P.ink,lineHeight:24},
-  // paddingRight : garantit que DIM reste atteignable au bout du défilement.
+  weekBadge:{alignItems:"center",justifyContent:"center",minWidth:66,paddingHorizontal:SP.md,paddingVertical:SP.sm,borderRadius:RD.md,backgroundColor:GL.fill,borderWidth:1,borderColor:GL.border},
+  weekBadgeLabel:{...T.label,fontSize:8,letterSpacing:1.1,color:P.inkFaint},
+  weekBadgeValue:{fontFamily:F.sans,fontSize:21,fontWeight:"800",color:P.ink,lineHeight:25},
   dayScroller:{gap:SP.sm,paddingVertical:SP.lg,paddingRight:SP.xxl,paddingLeft:2},
-  dayCard:{width:60,minHeight:LAYOUT.tapTarget+30,paddingVertical:SP.md,borderRadius:RD.lg,backgroundColor:P.surface,borderWidth:1,borderColor:P.line,alignItems:"center",justifyContent:"center",gap:SP.xs},
-  dayCardActive:{backgroundColor:P.limeDark,borderColor:P.lime,...SH.limeGlow},
+  dayCard:{...glassStyle(12),width:62,minHeight:LAYOUT.tapTarget+32,paddingVertical:SP.md,borderRadius:RD.lg,backgroundColor:GL.fill,borderWidth:1,borderColor:GL.border,alignItems:"center",justifyContent:"center",gap:SP.xs},
+  dayCardActive:{backgroundColor:"rgba(37,80,252,0.35)",borderColor:P.blueSoft,...SH.glowBlue},
   dayLabel:{...T.label,fontSize:10,color:P.inkMuted},
-  dayLabelActive:{color:P.lime},
+  dayLabelActive:{color:P.ink},
   dayEmoji:{fontSize:18},
-  dayDot:{width:5,height:5,borderRadius:RD.pill,backgroundColor:P.lineStrong},
-  dayDotActive:{width:18,backgroundColor:P.lime},
+  dayDot:{width:5,height:5,borderRadius:RD.pill,backgroundColor:GL.border},
+  dayDotActive:{width:18,backgroundColor:P.cyan},
 
-  workoutHero:{borderRadius:RD.xl,padding:SP.lg,flexDirection:"row",alignItems:"center",gap:SP.md,marginBottom:SP.md,borderWidth:1,borderColor:P.lineStrong,...SH.card},
-  heroIcon:{width:54,height:54,borderRadius:RD.md,backgroundColor:GL.shade,borderWidth:1,borderColor:GL.edge,alignItems:"center",justifyContent:"center"},
-  workoutType:{...T.label,fontSize:9,color:P.lime},
+  workoutHero:{...glassStyle(16),borderRadius:RD.xl,padding:SP.lg,flexDirection:"row",alignItems:"center",gap:SP.md,marginBottom:SP.md,borderWidth:1,borderColor:GL.border,overflow:"hidden",...SH.card},
+  heroIcon:{width:56,height:56,borderRadius:RD.md,backgroundColor:GL.fillStrong,borderWidth:1,borderColor:GL.border,alignItems:"center",justifyContent:"center"},
+  workoutType:{...T.label,fontSize:9.5,color:P.cyan},
   heroSubtitle:{...T.muted,color:P.inkMuted},
 
   // ---------- Exercices ----------
-  exerciseCard:{backgroundColor:P.surface,borderColor:P.line},
+  exerciseCard:{},
   exerciseTop:{flexDirection:"row",alignItems:"flex-start",gap:SP.md},
-  exerciseNumber:{width:34,height:34,borderRadius:RD.sm,backgroundColor:P.surfaceHigh,borderWidth:1,borderColor:P.lineStrong,alignItems:"center",justifyContent:"center"},
-  exerciseNumberText:{fontFamily:F.cond,fontSize:15,fontWeight:"700",color:P.lime},
+  exerciseNumber:{width:36,height:36,borderRadius:RD.sm,backgroundColor:GL.fillStrong,borderWidth:1,borderColor:GL.border,alignItems:"center",justifyContent:"center"},
+  exerciseNumberText:{fontFamily:F.sans,fontSize:15,fontWeight:"800",color:P.violetSoft},
   exerciseName:{...T.section,fontSize:16,color:P.ink,marginBottom:2},
-  videoButton:{minHeight:38,justifyContent:"center",paddingHorizontal:SP.md,paddingVertical:SP.sm,borderRadius:RD.md,backgroundColor:P.tealDark,borderWidth:1,borderColor:P.teal},
-  videoButtonText:{...T.label,fontSize:10,letterSpacing:.6,textTransform:"none",color:P.teal},
-  noVideo:{...T.muted,fontSize:9,color:P.inkFaint,maxWidth:64,textAlign:"center"},
-  changeButton:{alignSelf:"flex-start",minHeight:36,justifyContent:"center",marginTop:SP.md,paddingHorizontal:SP.md,paddingVertical:SP.sm,borderRadius:RD.md,backgroundColor:P.surfaceHigh,borderWidth:1,borderColor:P.lineStrong},
-  changeButtonText:{...T.label,fontSize:10,letterSpacing:.4,textTransform:"none",color:P.inkMuted},
+  videoButton:{minHeight:40,justifyContent:"center",paddingHorizontal:SP.md,paddingVertical:SP.sm,borderRadius:RD.pill,backgroundColor:"rgba(122,73,227,0.35)",borderWidth:1,borderColor:P.violetSoft},
+  videoButtonText:{...T.label,fontSize:11,letterSpacing:0,textTransform:"none",color:P.ink,fontWeight:"700"},
+  noVideo:{...T.muted,fontSize:9.5,color:P.inkFaint,maxWidth:64,textAlign:"center"},
+  changeButton:{alignSelf:"flex-start",minHeight:38,justifyContent:"center",marginTop:SP.md,paddingHorizontal:SP.md,paddingVertical:SP.sm,borderRadius:RD.pill,backgroundColor:GL.fill,borderWidth:1,borderColor:GL.border},
+  changeButtonText:{...T.label,fontSize:10.5,letterSpacing:0,textTransform:"none",color:P.inkMuted},
 
   prescriptionRow:{flexDirection:"row",flexWrap:"wrap",justifyContent:"space-between",alignItems:"center",gap:SP.sm,marginTop:SP.lg},
-  prescription:{fontFamily:F.cond,fontSize:22,fontWeight:"700",color:P.ink},
-  loadChip:{backgroundColor:P.limeDark,borderWidth:1,borderColor:P.limeDeep,borderRadius:RD.md,paddingHorizontal:SP.md,paddingVertical:SP.sm,alignItems:"flex-end"},
-  loadChipLabel:{...T.label,fontSize:8,color:P.limeDeep},
-  loadChipValue:{fontFamily:F.cond,fontSize:20,fontWeight:"700",color:P.lime,lineHeight:22},
+  prescription:{fontFamily:F.sans,fontSize:22,fontWeight:"800",letterSpacing:-.6,color:P.ink},
+  loadChip:{backgroundColor:"rgba(37,80,252,0.30)",borderWidth:1,borderColor:"rgba(75,141,225,0.6)",borderRadius:RD.md,paddingHorizontal:SP.md,paddingVertical:SP.sm,alignItems:"flex-end"},
+  loadChipLabel:{...T.label,fontSize:8,letterSpacing:1,color:P.cyan},
+  loadChipValue:{fontFamily:F.sans,fontSize:20,fontWeight:"800",letterSpacing:-.5,color:P.ink,lineHeight:24},
   rest:{...T.muted,color:P.inkMuted,marginTop:SP.md},
   setHead:{flexDirection:"row",gap:SP.sm,marginTop:SP.lg,alignItems:"center"},
   setHeadCell:{...T.label,fontSize:9,color:P.inkFaint,flex:1,minWidth:0,textAlign:"center"},
   setRow:{flexDirection:"row",gap:SP.sm,marginTop:SP.sm,alignItems:"center"},
-  setLabel:{...T.label,fontSize:11,color:P.lime,width:24},
-  setInput:{flex:1,minWidth:0,height:44,backgroundColor:P.void,borderWidth:1,borderColor:P.lineStrong,borderRadius:RD.md,color:P.ink,paddingHorizontal:SP.sm,textAlign:"center",fontFamily:F.cond,fontSize:17,fontWeight:"700"},
+  setLabel:{...T.label,fontSize:11,letterSpacing:0,color:P.violetSoft,width:26},
+  setInput:{flex:1,minWidth:0,height:46,backgroundColor:"rgba(255,255,255,0.05)",borderWidth:1,borderColor:GL.border,borderRadius:RD.md,color:P.ink,paddingHorizontal:SP.sm,textAlign:"center",fontFamily:F.sans,fontSize:17,fontWeight:"700"},
   setField:{flex:1,minWidth:0},
-  history:{marginTop:SP.lg,paddingTop:SP.md,borderTopWidth:1,borderTopColor:P.line},
-  historyTitle:{...T.label,fontSize:9,color:P.teal,marginBottom:SP.sm},
-  historyItem:{...T.muted,fontFamily:F.cond,fontSize:13,color:P.inkMuted,marginTop:SP.xs},
+  history:{marginTop:SP.lg,paddingTop:SP.md,borderTopWidth:1,borderTopColor:GL.border},
+  historyTitle:{...T.label,fontSize:9,color:P.cyan,marginBottom:SP.sm},
+  historyItem:{...T.muted,fontSize:12.5,color:P.inkMuted,marginTop:SP.xs},
 
-  drillCard:{borderColor:P.amber,backgroundColor:P.amberDark},
-  drillBadge:{...T.label,fontSize:9,color:P.amber,marginBottom:SP.md},
-  restDay:{borderColor:P.teal,backgroundColor:P.tealDark},
-  restTitle:{...T.label,fontSize:11,color:P.teal,marginBottom:SP.md},
+  drillCard:{borderColor:"rgba(212,63,161,0.45)"},
+  drillBadge:{...T.label,fontSize:9,color:P.pinkSoft,marginBottom:SP.md},
+  restDay:{borderColor:"rgba(43,196,236,0.4)"},
+  restTitle:{...T.label,fontSize:11,color:P.cyan,marginBottom:SP.md},
   priorityRow:{flexDirection:"row",gap:SP.md,alignItems:"flex-start",paddingVertical:SP.sm},
-  check:{color:P.teal,fontWeight:"700",fontFamily:F.sans},
+  check:{color:P.cyan,fontWeight:"800",fontFamily:F.sans},
   restFoot:{...T.muted,color:P.inkFaint,marginTop:SP.md},
 
-  favoritesCard:{paddingVertical:SP.md},
+  favoritesCard:{},
   favoriteWrap:{flexDirection:"row",flexWrap:"wrap",gap:SP.sm},
-  favoritePill:{backgroundColor:P.surfaceHigh,borderWidth:1,borderColor:P.lineStrong,borderRadius:RD.pill,paddingHorizontal:SP.md,paddingVertical:SP.sm},
-  favoriteText:{...T.label,fontSize:10,letterSpacing:.3,textTransform:"none",color:P.ink},
+  favoritePill:{backgroundColor:GL.fill,borderWidth:1,borderColor:GL.border,borderRadius:RD.pill,paddingHorizontal:SP.md,paddingVertical:SP.sm},
+  favoriteText:{...T.label,fontSize:11,letterSpacing:0,textTransform:"none",color:P.inkSoft},
 
   // ---------- Modales ----------
   modalBackdrop:{flex:1,backgroundColor:GL.scrim,padding:SP.lg,justifyContent:"center"},
-  videoModal:{width:"100%",maxWidth:LAYOUT.maxContentWidth,alignSelf:"center",backgroundColor:P.surface,borderRadius:RD.xxl,padding:SP.lg,borderWidth:1,borderColor:P.lineStrong,...SH.lift},
+  videoModal:{...glassStyle(24),width:"100%",maxWidth:LAYOUT.maxContentWidth,alignSelf:"center",backgroundColor:P.night,borderRadius:RD.xxl,padding:SP.lg,borderWidth:1,borderColor:GL.borderBright,...SH.lift},
   modalHead:{flexDirection:"row",alignItems:"flex-start",gap:SP.md,marginBottom:SP.md},
-  closeButton:{width:LAYOUT.tapTarget,height:LAYOUT.tapTarget,borderRadius:RD.pill,backgroundColor:P.surfaceHigh,borderWidth:1,borderColor:P.lineStrong,alignItems:"center",justifyContent:"center"},
+  closeButton:{width:LAYOUT.tapTarget,height:LAYOUT.tapTarget,borderRadius:RD.pill,backgroundColor:GL.fill,borderWidth:1,borderColor:GL.border,alignItems:"center",justifyContent:"center"},
   closeText:{color:P.ink,fontSize:24,lineHeight:26,fontFamily:F.sans},
   video:{width:"100%",aspectRatio:16/9,borderRadius:RD.lg,backgroundColor:P.void,marginBottom:SP.md},
-  nativeVideoFallback:{alignItems:"center",justifyContent:"center",borderWidth:1,borderColor:P.teal},
-  videoSource:{...T.label,fontSize:10,letterSpacing:.4,textTransform:"none",color:P.teal,marginBottom:SP.sm},
-  swapModal:{width:"100%",maxWidth:LAYOUT.maxContentWidth,maxHeight:"92%",alignSelf:"center",backgroundColor:P.surface,borderRadius:RD.xxl,borderWidth:1,borderColor:P.lineStrong,...SH.lift},
+  nativeVideoFallback:{alignItems:"center",justifyContent:"center",borderWidth:1,borderColor:P.violetSoft},
+  videoSource:{...T.label,fontSize:10.5,letterSpacing:0,textTransform:"none",color:P.cyan,marginBottom:SP.sm},
+  swapModal:{...glassStyle(24),width:"100%",maxWidth:LAYOUT.maxContentWidth,maxHeight:"92%",alignSelf:"center",backgroundColor:P.night,borderRadius:RD.xxl,borderWidth:1,borderColor:GL.borderBright,...SH.lift},
   swapContent:{padding:SP.lg,paddingBottom:SP.xxl},
-  swapTitle:{...T.label,fontSize:9,color:P.lime,marginTop:SP.xl,marginBottom:SP.md},
-  swapOption:{flexDirection:"row",alignItems:"center",gap:SP.md,minHeight:LAYOUT.tapTarget+10,padding:SP.md,borderRadius:RD.md,backgroundColor:P.surfaceRaised,borderWidth:1,borderColor:P.line,marginBottom:SP.sm},
-  swapArrow:{color:P.lime,fontSize:24,fontFamily:F.sans},
+  swapTitle:{...T.label,fontSize:9.5,color:P.violetSoft,marginTop:SP.xl,marginBottom:SP.md},
+  swapOption:{flexDirection:"row",alignItems:"center",gap:SP.md,minHeight:LAYOUT.tapTarget+10,padding:SP.md,borderRadius:RD.md,backgroundColor:GL.fill,borderWidth:1,borderColor:GL.border,marginBottom:SP.sm},
+  swapArrow:{color:P.violetSoft,fontSize:24,fontFamily:F.sans},
 
   // ---------- Nutrition ----------
-  photoBox:{minHeight:180,borderRadius:RD.xl,backgroundColor:P.surface,borderWidth:1,borderStyle:"dashed",borderColor:P.lineStrong,alignItems:"center",justifyContent:"center",marginVertical:SP.md,overflow:"hidden",padding:SP.lg},
+  photoBox:{...glassStyle(10),minHeight:180,borderRadius:RD.xl,backgroundColor:GL.fillSoft,borderWidth:1,borderStyle:"dashed",borderColor:GL.border,alignItems:"center",justifyContent:"center",marginVertical:SP.md,overflow:"hidden",padding:SP.lg},
   photo:{width:"100%",height:"100%"},
   photoTitle:{...T.section,fontSize:16,color:P.ink,marginTop:SP.sm},
-  groceryList:{marginTop:SP.lg,paddingTop:SP.sm,borderTopWidth:1,borderTopColor:P.line},
-  groceryRow:{flexDirection:"row",alignItems:"center",gap:SP.md,minHeight:LAYOUT.tapTarget,paddingVertical:SP.md,borderBottomWidth:1,borderBottomColor:P.line},
-  checkbox:{width:26,height:26,borderRadius:RD.sm,borderWidth:2,borderColor:P.lineStrong,alignItems:"center",justifyContent:"center"},
-  checkboxOn:{borderColor:P.lime,backgroundColor:P.lime},
+  groceryList:{marginTop:SP.lg,paddingTop:SP.sm,borderTopWidth:1,borderTopColor:GL.border},
+  groceryRow:{flexDirection:"row",alignItems:"center",gap:SP.md,minHeight:LAYOUT.tapTarget,paddingVertical:SP.md,borderBottomWidth:1,borderBottomColor:GL.border},
+  checkbox:{width:26,height:26,borderRadius:RD.sm,borderWidth:2,borderColor:GL.border,alignItems:"center",justifyContent:"center"},
+  checkboxOn:{borderColor:P.cyan,backgroundColor:P.cyan},
   checkboxMark:{color:P.inkInverse,fontSize:15,fontWeight:"900",fontFamily:F.sans,lineHeight:17},
   groceryDone:{color:P.inkFaint,textDecorationLine:"line-through"},
-  groceryPrice:{fontFamily:F.cond,fontSize:16,fontWeight:"700",color:P.lime},
+  groceryPrice:{fontFamily:F.sans,fontSize:16,fontWeight:"800",color:P.cyan},
   groceryTotal:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",gap:SP.md,paddingTop:SP.lg},
-  groceryTotalValue:{fontFamily:F.cond,fontSize:24,fontWeight:"700",color:P.ink},
+  groceryTotalValue:{fontFamily:F.sans,fontSize:23,fontWeight:"800",letterSpacing:-.6,color:P.ink},
 
   // ---------- Progression ----------
-  weight:{...T.dataXl,fontSize:50,color:P.ink,lineHeight:54},
-  kg:{fontFamily:F.sans,fontSize:16,fontWeight:"400",color:P.inkMuted},
-  good:{...T.muted,color:P.lime,fontWeight:"700"},
+  weight:{...T.dataXl,fontSize:46,color:P.ink,lineHeight:52},
+  kg:{fontFamily:F.sans,fontSize:16,fontWeight:"600",color:P.inkMuted},
+  good:{...T.muted,color:P.cyan,fontWeight:"700"},
   chart:{height:104,flexDirection:"row",alignItems:"flex-end",gap:3,paddingVertical:SP.md},
-  bar:{flex:1,minWidth:3,backgroundColor:P.limeDark,borderWidth:1,borderColor:P.limeDeep,borderRadius:RD.sm,minHeight:6},
-  barLast:{backgroundColor:P.lime,borderColor:P.lime},
-  chartEmpty:{minHeight:72,justifyContent:"center",alignItems:"center",paddingVertical:SP.md,borderWidth:1,borderStyle:"dashed",borderColor:P.line,borderRadius:RD.md,marginVertical:SP.md,paddingHorizontal:SP.md},
+  bar:{flex:1,minWidth:3,backgroundColor:"rgba(122,73,227,0.35)",borderWidth:1,borderColor:"rgba(167,123,240,0.5)",borderRadius:RD.sm,minHeight:6},
+  barLast:{backgroundColor:P.violet,borderColor:P.violetSoft},
+  chartEmpty:{minHeight:72,justifyContent:"center",alignItems:"center",paddingVertical:SP.md,borderWidth:1,borderStyle:"dashed",borderColor:GL.border,borderRadius:RD.md,marginVertical:SP.md,paddingHorizontal:SP.md},
   chartAxis:{flexDirection:"row",justifyContent:"space-between",gap:SP.sm,marginBottom:SP.sm},
-  chartAxisText:{...T.label,fontSize:9,color:P.inkFaint,textTransform:"none",letterSpacing:.3},
-  score:{...T.dataXl,color:P.lime,lineHeight:58},
-
-  // ---------- Première utilisation ----------
-  onbContent:{width:"100%",maxWidth:LAYOUT.maxContentWidth,alignSelf:"center",paddingHorizontal:SP.lg,paddingTop:SP.xxl,paddingBottom:SP.xxxl,minHeight:"100%"},
-  onbProgress:{flexDirection:"row",gap:SP.xs,marginBottom:SP.xl},
-  onbDot:{flex:1,height:4,borderRadius:RD.pill,backgroundColor:P.surfaceHigh},
-  onbDotOn:{backgroundColor:P.lime},
-  onbBody:{marginTop:SP.xl,marginBottom:SP.lg},
-  choice:{flexDirection:"row",alignItems:"center",gap:SP.md,minHeight:LAYOUT.tapTarget+14,padding:SP.md,borderRadius:RD.lg,backgroundColor:P.surface,borderWidth:1,borderColor:P.line},
-  choiceActive:{backgroundColor:P.limeDark,borderColor:P.lime},
-  choiceTitle:{...T.section,fontSize:15,color:P.ink},
-  radio:{width:22,height:22,borderRadius:RD.pill,borderWidth:2,borderColor:P.lineStrong},
-  radioOn:{borderColor:P.lime,backgroundColor:P.lime},
-  recapRow:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",gap:SP.md,paddingVertical:SP.md,borderBottomWidth:1,borderBottomColor:P.line},
-  recapLabel:{...T.label,fontSize:10,color:P.inkMuted},
-  recapValue:{fontFamily:F.cond,fontSize:21,fontWeight:"700",color:P.lime},
+  chartAxisText:{...T.label,fontSize:9.5,letterSpacing:0,textTransform:"none",color:P.inkFaint},
+  score:{...T.dataXl,color:P.cyan,lineHeight:52},
 
   // ---------- Navigation ----------
-  // navWrap porte le positionnement absolu ; la barre reste centrée et bornée sur grand écran.
   navWrap:{position:"absolute",left:0,right:0,bottom:0,alignItems:"center",paddingHorizontal:SP.md,paddingBottom:SP.md},
-  bottom:{width:"100%",maxWidth:LAYOUT.maxContentWidth,height:LAYOUT.navHeight,borderRadius:RD.xl,backgroundColor:P.surfaceRaised,borderWidth:1,borderColor:P.lineStrong,flexDirection:"row",justifyContent:"space-around",alignItems:"center",paddingHorizontal:SP.xs,...SH.lift},
-  nav:{flex:1,minHeight:LAYOUT.tapTarget,alignItems:"center",justifyContent:"center",paddingHorizontal:2,paddingVertical:SP.xs,borderRadius:RD.md,gap:1},
-  navActive:{backgroundColor:P.limeDark},
+  bottom:{...glassStyle(24),width:"100%",maxWidth:LAYOUT.maxContentWidth,height:LAYOUT.navHeight,borderRadius:RD.xl,backgroundColor:"rgba(10,10,29,0.82)",borderWidth:1,borderColor:GL.border,flexDirection:"row",justifyContent:"space-around",alignItems:"center",paddingHorizontal:SP.xs,overflow:"hidden",...SH.lift},
+  nav:{flex:1,minHeight:LAYOUT.tapTarget,alignItems:"center",justifyContent:"center",paddingHorizontal:2,paddingVertical:SP.xs,borderRadius:RD.md,gap:2},
+  navActive:{backgroundColor:"rgba(37,80,252,0.28)"},
   navIcon:{fontSize:17,color:P.inkFaint,fontFamily:F.sans},
-  navIconActive:{color:P.lime},
-  navText:{...T.label,fontSize:8,color:P.inkFaint},
-  navTextActive:{color:P.lime}
+  navIconActive:{color:P.blueSoft},
+  navText:{...T.label,fontSize:8.5,letterSpacing:.4,color:P.inkFaint},
+  navTextActive:{color:P.ink}
 });

@@ -8,7 +8,7 @@ const required=[
 "src/features/training/program.js",
 // Infrastructure
 "src/services/storage/store.js","src/services/health/sleepAutoDetection.js",
-"src/design/theme.js","src/pwa.js",
+"src/design/theme.js","src/design/icons.js","src/pwa.js",
 // Serveur IA
 "server/coach.js","server/health.js","server/rateLimit.js","server/index.js",
 "api/coach.js","api/health.js",
@@ -41,8 +41,13 @@ const hardcoded=appSource.match(/#[0-9a-fA-F]{3,8}\b/g)||[];
 assert.equal(hardcoded.length,0,`App.js must use design tokens, found hardcoded colors: ${hardcoded.join(", ")}`);
 assert(appSource.includes('from "./src/design/theme"'),"App.js must import the design tokens");
 const themeSource=fs.readFileSync(path.join(root,"src/design/theme.js"),"utf8");
-// La direction artistique abandonne le violet : garde-fou explicite.
-for(const banned of ["#39205f","#102d66","#392070","#9175ff","#b77cff"]) assert(!themeSource.includes(banned)&&!appSource.includes(banned),`legacy purple ${banned} must be gone`);
+// Direction « liquid glass » : la matière tient sur ces trois couches.
+for(const token of ["glass","gradient","blurStyle","glassStyle"]) assert(themeSource.includes(`export const ${token}`)||themeSource.includes(`export function ${token}`)||themeSource.includes(`export const ${token} =`),`theme must expose ${token}`);
+assert(themeSource.includes("backdropFilter"),"glass surfaces need a real backdrop blur on web");
+// Les emoji ne sont pas des icônes d'interface : rendu variable, couleur imposée.
+const emojiIcon=/(?:navIcon|<Text style=\{S\.section\}>)\s*[^<]*[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
+assert(!emojiIcon.test(appSource),"section and nav icons must be vector, not emoji");
+assert(appSource.includes('from "./src/design/icons"'),"App.js must use the vector icon set");
 assert(/minHeight:\s*LAYOUT\.tapTarget/.test(appSource),"interactive rows must respect the 46px tap target");
 
 // Onboarding : les objectifs doivent venir du profil, plus de constantes personnelles.
