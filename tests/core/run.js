@@ -44,4 +44,27 @@ results.push(test("grocery planner returns quantities and estimated totals",()=>
 const coach=require("../../server/coach.js");
 results.push(test("coach payload is bounded",()=>{assert.throws(()=>coach.validatePayload({today:{text:"x".repeat(51000)}}),/PAYLOAD_TOO_LARGE/)}));
 results.push(test("coach keeps only recent workout context",()=>{const p=coach.validatePayload({recentWorkouts:Array.from({length:50},(_,i)=>({i}))});assert.equal(p.recentWorkouts.length,30);assert.equal(p.recentWorkouts[0].i,20)}));
+
+const history=require("../../src/core/history.js");
+const day=(date,extra={})=>({date,calories:2500,protein:110,carbs:300,fat:70,steps:10000,sleepMin:450,water:3000,weight:55,...extra});
+results.push(test("journal upsert merges instead of duplicating",()=>{let h=history.upsertDay([],{date:"2026-09-01",calories:800});h=history.upsertDay(h,{date:"2026-09-01",protein:40});assert.equal(h.length,1);assert.equal(h[0].calories,800);assert.equal(h[0].protein,40)}));
+results.push(test("journal ignores entries without a valid date",()=>{assert.equal(history.upsertDay([],{calories:900}).length,0);assert.equal(history.upsertDay([],{date:"01-09-2026"}).length,0)}));
+results.push(test("journal stays sorted by date",()=>{let h=history.upsertDay([],{date:"2026-09-03"});h=history.upsertDay(h,{date:"2026-09-01"});h=history.upsertDay(h,{date:"2026-09-02"});assert.deepEqual(h.map(d=>d.date),["2026-09-01","2026-09-02","2026-09-03"])}));
+results.push(test("sleep is persisted across days and never lost",()=>{let h=[];for(const d of ["2026-09-01","2026-09-02"])h=history.upsertDay(h,{date:d,sleepMin:400});assert.equal(history.lastNDays(h,7).filter(x=>x.sleepMin===400).length,2)}));
+results.push(test("weekly summary averages real days only",()=>{let h=[];for(let i=1;i<=3;i++)h=history.upsertDay(h,day(`2026-09-0${i}`,{calories:2000,protein:100}));const s=history.weeklySummary(h,{calories:2500,protein:110,steps:10000,sleepMin:450});assert.equal(s.sampleDays,3);assert.equal(s.avgCalories,2000)}));
+results.push(test("weekly summary is empty without data",()=>{const s=history.weeklySummary([],{calories:2500});assert.equal(s.sampleDays,0);assert.equal(s.score,0)}));
+results.push(test("weekly summary score stays 0..100",()=>{let h=[];for(let i=1;i<=7;i++)h=history.upsertDay(h,day(`2026-09-0${i}`,{calories:9000,protein:900,steps:90000,sleepMin:900}));const s=history.weeklySummary(h,{calories:2500,protein:110,steps:10000,sleepMin:450});assert(s.score>=0&&s.score<=100)}));
+results.push(test("weekly summary reports real weight change",()=>{let h=history.upsertDay([],day("2026-09-01",{weight:55}));h=history.upsertDay(h,day("2026-09-05",{weight:55.6}));const s=history.weeklySummary(h,{calories:2500,protein:110,steps:10000,sleepMin:450});assert.equal(s.weightChange,.6)}));
+results.push(test("sleep debt accumulates only missing minutes",()=>{let h=history.upsertDay([],{date:"2026-09-01",sleepMin:390});h=history.upsertDay(h,{date:"2026-09-02",sleepMin:500});assert.equal(history.sleepDebt(h,450,7),60)}));
+results.push(test("sleep debt is zero without nights",()=>{assert.equal(history.sleepDebt([],450,7),0)}));
+results.push(test("weight series feeds plateau detection",()=>{let h=[];for(let i=1;i<=20;i++)h=history.upsertDay(h,{date:`2026-09-${String(i).padStart(2,"0")}`,weight:55});const series=history.weightSeries(h);assert.equal(series.length,20);const p=auto.detectPlateau(series,"lean_gain");assert.equal(p.detected,true);assert.equal(p.suggestedCalories,150)}));
+results.push(test("weight series skips days without weighing",()=>{let h=history.upsertDay([],{date:"2026-09-01",weight:55});h=history.upsertDay(h,{date:"2026-09-02",calories:2000});assert.equal(history.weightSeries(h).length,1)}));
+results.push(test("streak counts consecutive logged days",()=>{let h=[];for(const d of ["2026-09-09","2026-09-10","2026-09-11"])h=history.upsertDay(h,{date:d,calories:2000});assert.equal(history.streak(h,"2026-09-11"),3)}));
+results.push(test("streak breaks on a missing day",()=>{let h=history.upsertDay([],{date:"2026-09-09",calories:2000});h=history.upsertDay(h,{date:"2026-09-11",calories:2000});assert.equal(history.streak(h,"2026-09-11"),1)}));
+
+results.push(test("a night without data is never counted as zero sleep",()=>{let h=[];for(let i=1;i<=6;i++)h=history.upsertDay(h,{date:`2026-09-0${i}`,weight:55});h=history.upsertDay(h,{date:"2026-09-07",sleepMin:480,calories:2000});const s=history.weeklySummary(h,{calories:2500,protein:110,steps:10000,sleepMin:450});assert.equal(s.avgSleepMin,480);assert.equal(s.sampleDays,1)}));
+results.push(test("sleep debt ignores nights without data",()=>{let h=history.upsertDay([],{date:"2026-09-01",weight:55});h=history.upsertDay(h,{date:"2026-09-02",sleepMin:400});assert.equal(history.sleepDebt(h,450,7),50)}));
+results.push(test("weight-only days do not inflate the weekly sample",()=>{let h=[];for(let i=1;i<=7;i++)h=history.upsertDay(h,{date:`2026-09-0${i}`,weight:55});const s=history.weeklySummary(h,{calories:2500});assert.equal(s.sampleDays,0);assert.equal(s.avgSleepMin,0)}));
+results.push(test("streak ignores weight-only days",()=>{let h=history.upsertDay([],{date:"2026-09-11",weight:55});assert.equal(history.streak(h,"2026-09-11"),0)}));
+
 process.exit(results.every(Boolean)?0:1);
