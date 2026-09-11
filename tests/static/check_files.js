@@ -2,7 +2,7 @@ const fs=require("fs"),path=require("path"),assert=require("assert");
 const root=path.resolve(__dirname,"../..");
 const required=[
 "App.js","package.json","app.json","src/core/autopilot.js","src/core/featureFlags.js",
-"src/core/progression.js","src/core/groceryPlanner.js","src/core/history.js","src/core/profile.js","server/rateLimit.js","src/features/training/program.js",
+"src/core/progression.js","src/core/groceryPlanner.js","src/core/history.js","src/core/profile.js","server/rateLimit.js","server/health.js","api/health.js","api/coach.js","src/features/training/program.js",
 "src/core/intelligence.js","src/design/theme.js","src/pwa.js","public/index.html","public/sw.js","public/manifest.webmanifest",
 "src/domain/model.js","src/types/contracts.js","src/services/health/sleepAutoDetection.js",
 "src/services/storage/store.js","src/services/storage/memory.js","src/services/storage/privacy.js",
@@ -58,6 +58,15 @@ assert(!/sk-or-[A-Za-z0-9]/.test(appSource),"no OpenRouter key literal may appea
 // Le coach doit recevoir ce que l'app a calculé, sinon il ne peut rien justifier.
 for(const field of ["week","plateau","recovery","planned"]) assert(coachSource.includes(`${field}:`)||coachSource.includes(`${field} =`),`coach payload must carry ${field}`);
 assert(appSource.includes("buildCoachPayload"),"App.js must build the enriched coach payload");
+
+// L'utilisateur doit pouvoir distinguer une vraie réponse IA d'un repli local.
+assert(appSource.includes("coachSource"),"the app must track whether the advice came from the AI");
+assert(!appSource.includes('"Coach IA connecté • clé conservée côté serveur"')||appSource.includes("coachStatusLabel"),"the AI status must reflect the real configuration");
+// La non-fuite de la clé est vérifiée à l'exécution (tests/core) ; ici on vérifie
+// seulement que l'endpoint n'expose jamais la variable brute dans sa réponse.
+const healthSource=fs.readFileSync(path.join(root,"server/health.js"),"utf8");
+assert(!/(?:key|apiKey)\s*:\s*key\b/.test(healthSource),"health must never return the raw key");
+assert(healthSource.includes("keyConfigured")&&healthSource.includes("status"),"health must report an actionable coach status");
 
 // PWA : sans le lien manifest, l'app n'est pas installable sur iPhone.
 const indexHtml=fs.readFileSync(path.join(root,"public/index.html"),"utf8");

@@ -100,4 +100,11 @@ results.push(test("prompt explains the engine load decision",()=>{const prompt=c
 results.push(test("prompt admits missing data instead of inventing it",()=>{const prompt=coach.buildPrompt(coach.validatePayload({}));assert(prompt.includes("Pas encore assez de journées"));assert(prompt.includes("Aucune charge à recommander"))}));
 results.push(test("prompt forbids going under the calorie targets",()=>{const prompt=coach.buildPrompt(coach.validatePayload({}));assert(prompt.includes("jamais de descendre sous les cibles"));assert(prompt.includes("maximum 3 priorités"))}));
 
+const healthMod=require("../../server/health.js");
+const callHealth=()=>{let out=null;healthMod.healthHandler({},{status:()=>({json:o=>{out=o}})});return out};
+results.push(test("health never leaks the API key",()=>{process.env.OPENROUTER_API_KEY="sk-or-v1-"+"z".repeat(40);const h=callHealth();assert(!JSON.stringify(h).includes("zzzz"),"la clé fuit dans la réponse")}));
+results.push(test("health reports a missing key with an actionable hint",()=>{process.env.OPENROUTER_API_KEY="";const h=callHealth();assert.equal(h.coach.status,"MISSING_KEY");assert(h.coach.hint.includes("Vercel"))}));
+results.push(test("health flags a malformed key instead of claiming ready",()=>{process.env.OPENROUTER_API_KEY="oops";const h=callHealth();assert.equal(h.coach.status,"MALFORMED_KEY")}));
+results.push(test("health reports ready on a well formed key",()=>{process.env.OPENROUTER_API_KEY="sk-or-v1-"+"a".repeat(40);const h=callHealth();assert.equal(h.coach.status,"READY");assert.equal(h.coach.keyLooksValid,true);process.env.OPENROUTER_API_KEY=""}));
+
 process.exit(results.every(Boolean)?0:1);

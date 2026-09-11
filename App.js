@@ -231,13 +231,26 @@ function ProgramPage({selectedDayKey,setSelectedDayKey,week,setWeek,drafts,onSav
 }
 
 function Home({app}){
-const {phase,remaining,total,targets,stepValue,coach,coachLoading,analyze,autopilotActions,generateWeek,setTab,health,quality,jjb,gym,todayWorkout,water,waterTarget,setWaterAmount,addWater,caffeine,setCaffeine,recovery,dayStreak,setStepCount,profile}=app;
+const {phase,remaining,total,targets,stepValue,coach,coachLoading,analyze,autopilotActions,generateWeek,setTab,health,quality,jjb,gym,todayWorkout,water,waterTarget,setWaterAmount,addWater,caffeine,setCaffeine,recovery,dayStreak,setStepCount,profile,coachStatus,coachSource}=app;
+// On dit la vérité sur l'origine du conseil : IA réelle ou repli local.
+const coachStatusLabel=
+  coachSource==="ai" ? `Réponse du coach IA • ${coachStatus.model||"modèle gratuit"}`
+  : coachSource==="rate_limited" ? "Trop de demandes : patiente un instant."
+  : coachSource==="provider_down" ? "Coach IA indisponible : conseil calculé localement."
+  : coachSource ? "Serveur injoignable : conseil calculé localement."
+  : coachStatus.state==="ready" ? "Coach IA prêt • clé conservée côté serveur"
+  : coachStatus.state==="misconfigured" ? `⚠️ ${coachStatus.detail||"Configuration IA incomplète."}`
+  : coachStatus.state==="offline" ? "Serveur IA injoignable : mode local."
+  : "Vérification de la configuration…";
 return <ScrollView key="home" contentContainerStyle={S.content}>
   <View style={S.header}><View><Text style={S.eyebrow}>YPROGRESS • COACH OS</Text><Text style={S.title}>{profile?.name?`Salut ${profile.name} 👋`:"Salut 👋"}</Text><Text style={S.muted}>Ton coach décide avec toi.</Text></View><View style={S.avatar}><Text style={S.avatarText}>{(profile?.name||"Y").trim().charAt(0).toUpperCase()}</Text></View></View>
   <View style={S.phase}><Text style={S.phaseIcon}>{phase.icon}</Text><View style={{flex:1}}><Text style={S.phaseTitle}>{phase.title}</Text><Text style={S.phaseSub}>{phase.sub}</Text></View>{dayStreak>0?<View style={S.streakBadge}><Text style={S.streakValue}>{dayStreak}</Text><Text style={S.streakLabel}>JOURS</Text></View>:<Text style={S.arrow}>›</Text>}</View>
   <Card style={S.hero}><View><Text style={S.eyebrow}>RESTE À MANGER</Text><Text style={S.heroNum}>{remaining}</Text><Text style={S.muted}>kcal • cible dynamique</Text></View><View style={S.glow}><Text style={{fontSize:32}}>🔥</Text></View></Card>
   <View style={S.metrics}><Metric emoji="🔥" label="Calories" value={Math.round(total.calories)} target={targets.calories}/><Metric emoji="🥩" label="Protéines" value={Math.round(total.protein)} target={targets.protein} display={targets.protein+" g"}/><Metric emoji="🚶" label="Pas" value={stepValue} target={targets.steps} display={targets.steps>=1000?`${Math.round(targets.steps/100)/10}k`:targets.steps}/></View>
-  <Card><View style={S.cardHead}><Text style={S.section}>🧠 Décision du jour</Text><Text style={S.ai}>ADAPTATIF</Text></View><Text style={S.coach}>{coach}</Text><Text style={S.muted}>{coachLoading?"Analyse IA en cours…":(AI_BASE_URL||typeof window!=="undefined")?"Coach IA connecté • clé conservée côté serveur":"Mode local de secours"}</Text><Button title={coachLoading?"Analyse…":"Analyser ma journée"} onPress={analyze}/></Card>
+  <Card><View style={S.cardHead}><Text style={S.section}>🧠 Décision du jour</Text><Text style={[S.ai,coachSource&&coachSource!=="ai"&&S.aiWarn]}>{coachSource==="ai"?"COACH IA":coachSource?"HORS LIGNE":"ADAPTATIF"}</Text></View>
+      <Text style={S.coach}>{coach}</Text>
+      <Text style={S.muted}>{coachLoading?"Analyse en cours…":coachStatusLabel}</Text>
+      <Button title={coachLoading?"Analyse…":"Analyser ma journée"} onPress={analyze}/></Card>
   <Card style={S.autopilot}>
     <View style={S.cardHead}><Text style={S.section}>🧠 AUTOPILOT</Text><Text style={S.ai}>3 PRIORITÉS</Text></View>
     {autopilotActions.map((a,i)=><View key={i} style={S.actionRow}><Text style={S.actionNum}>{i+1}</Text><Text style={S.text}>{a}</Text></View>)}
@@ -345,6 +358,7 @@ export default function App(){
   const [trainingHistory,setTrainingHistory]=useState([]),[trainingWeek,setTrainingWeek]=useState(1);
   const [coach,setCoach]=useState("Appuie sur « Analyser ma journée » pour obtenir une décision claire.");
   const [coachLoading,setCoachLoading]=useState(false),[photo,setPhoto]=useState(null),[budget,setBudget]=useState("60");
+  const [coachStatus,setCoachStatus]=useState({state:"checking"}),[coachSource,setCoachSource]=useState(null);
   const [weekly,setWeekly]=useState({score:0,weightChange:0,avgCalories:0,avgProtein:0});
   const [foodDraft,setFoodDraft]=useState({name:"",calories:"",protein:"",carbs:"",fat:""});
   const [groceryList,setGroceryList]=useState(null),[exerciseOverrides,setExerciseOverrides]=useState({});
@@ -391,6 +405,19 @@ export default function App(){
       if(Number(today.steps)>0) setSteps(String(today.steps));
     }
     setReady(true);
+  })()},[]);
+
+  // Diagnostic de configuration : sans ça, un repli local silencieux passe
+  // pour une réponse du coach IA.
+  useEffect(()=>{(async()=>{
+    const endpoint=AI_BASE_URL||((typeof window!=="undefined"&&window.location?.origin)?window.location.origin+"/api":"");
+    if(!endpoint){setCoachStatus({state:"offline"});return}
+    try{
+      const r=await fetch(endpoint+"/health");
+      if(!r.ok)throw new Error("HTTP_"+r.status);
+      const d=await r.json();
+      setCoachStatus({state:d?.coach?.status==="READY"?"ready":"misconfigured",detail:d?.coach?.hint,model:d?.model});
+    }catch(e){setCoachStatus({state:"offline"})}
   })()},[]);
 
   /**
@@ -470,9 +497,10 @@ export default function App(){
     if(endpoint)try{
       const r=await fetch(endpoint+"/coach",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(buildCoachPayload())});
       const d=await r.json().catch(()=>({}));
-      if(r.status===429){setCoach(`⏳ ${d.message||"Trop de demandes coup sur coup."} (réessaie dans ${d.retryAfter||60} s)`);setCoachLoading(false);return}
-      if(r.ok&&(d.message||d.coach)){setCoach(d.message||d.coach);setCoachLoading(false);return}
-    }catch(e){}
+      if(r.status===429){setCoach(`⏳ ${d.message||"Trop de demandes coup sur coup."} (réessaie dans ${d.retryAfter||60} s)`);setCoachSource("rate_limited");setCoachLoading(false);return}
+      if(r.ok&&(d.message||d.coach)){setCoach(d.message||d.coach);setCoachSource("ai");setCoachLoading(false);return}
+      setCoachSource(d?.error==="COACH_UNAVAILABLE"?"provider_down":"error");
+    }catch(e){setCoachSource("offline")}
     setCoach(localCoachAdvice());
     setCoachLoading(false);
   }
@@ -616,7 +644,7 @@ export default function App(){
     foodDraft,setFoodDraft,restaurantChoice,photoMeal,photo,setPhoto,restaurantMode,pRemain,budget,setBudget,generateGroceries,groceryList,dynamicCarbs,addLog,
     currentWeight,weight,setWeight,saveWeight,sleep,setSleep,wake,setWake,setQuality,saveSleep,weekly,weeklyAnalysis,plateau,sleepAdvice,journal,
     notifications,scheduleNotifications,saveTargets,setStepCount,ready,
-    profile,saveProfile,openOnboarding:()=>setOnboarding(true)};
+    profile,saveProfile,openOnboarding:()=>setOnboarding(true),coachStatus,coachSource};
   const pages={
     home:<Home app={app}/>,
     nutrition:<Nutrition app={app}/>,
@@ -661,6 +689,7 @@ const S=StyleSheet.create({
   reason:{...T.muted,color:P.inkMuted,marginTop:SP.sm},
   ai:{...T.label,color:P.lime,backgroundColor:P.limeDark,borderWidth:1,borderColor:P.limeDeep,paddingHorizontal:SP.sm,paddingVertical:3,borderRadius:RD.pill,overflow:"hidden"},
   alertCard:{borderColor:P.clay,backgroundColor:P.clayDark},
+  aiWarn:{color:P.amber,backgroundColor:P.amberDark,borderColor:P.amber},
 
   // ---------- Hero « reste à manger » ----------
   hero:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",gap:SP.md,borderColor:P.lineStrong,backgroundColor:P.surfaceRaised,overflow:"hidden"},

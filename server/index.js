@@ -1,10 +1,11 @@
 const express = require('express');
 const cors = require('cors');
 const { coachHandler } = require('./coach');
+const { healthHandler } = require('./health');
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
-app.get('/health', (req, res) => res.json({ ok: true, version: '15.0-ai-coach', model: process.env.OPENROUTER_MODEL || 'openrouter/free' }));
+app.get('/health', healthHandler);
 app.post('/coach', coachHandler);
 app.post('/meal-analysis', (req, res) => res.status(501).json({ error: 'MEAL_ANALYSIS_NOT_IMPLEMENTED' }));
 app.post('/weekly-insights', (req, res) => res.status(501).json({ error: 'WEEKLY_NOT_IMPLEMENTED' }));
