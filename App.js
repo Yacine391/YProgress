@@ -405,6 +405,7 @@ export default function App(){
   const currentWeight=(health.weight ?? Number(weight)) || 55, stepValue=(health.steps ?? Number(steps)) || 0;
   const remaining=Math.max(0,Math.round(targets.calories-total.calories)), pRemain=Math.max(0,Math.round(targets.protein-total.protein));
   function todayWorkout(){return dayByKey(dayKeyForDate())}
+  const progressionContext={sleepMin:health.sleepMin,fatigue:hardDay?5:2,proteinRatio:targets.protein?total.protein/targets.protein:0,calorieRatio:targets.calories?total.calories/targets.calories:0,hydrationRatio:waterTarget?water/waterTarget:0,jjbSessions:jjb?1:0,cardioSessions:jjb?1:0};
 
   async function addLog(x){
     const all=await store.get(KEYS.logs,[]);
@@ -430,7 +431,51 @@ export default function App(){
   }
   async function photoMeal(){const p=await ImagePicker.requestCameraPermissionsAsync();if(!p.granted)return Alert.alert("Caméra","Autorise la caméra dans Réglages.");const r=await ImagePicker.launchCameraAsync({mediaTypes:["images"],quality:.8});if(!r.canceled)setPhoto(r.assets[0].uri)}
   async function scheduleNotifications(v){setNotifications(v);await Notifications.requestPermissionsAsync();await Notifications.cancelAllScheduledNotificationsAsync();if(!v)return;for(const [h,m,t,b] of [[8,0,"🌅 YProgress","Petit-déjeuner + protéines"],[13,0,"🍽️ YProgress","Enregistre ton déjeuner"],[16,30,"🥛 YProgress","Vérifie tes protéines"],[19,0,"🏋️ YProgress","Prépare ton entraînement"],[22,30,"😴 YProgress","Protège ton sommeil"]])await Notifications.scheduleNotificationAsync({content:{title:t,body:b},trigger:{hour:h,minute:m,repeats:true}})}
-  async function analyze(){setCoachLoading(true);const recentWorkouts=trainingHistory.slice(-30);const payload={profile:{weight:currentWeight,targets,phase:phase.key},today:{date:iso(),total,steps:stepValue,sleepMin:health.sleepMin,gym,jjb,water,waterTarget},recentWorkouts,coachContext:{autopilot,hardDay,caffeine,restaurantMode}};const endpoint=AI_BASE_URL||((typeof window!=="undefined"&&window.location?.origin)?window.location.origin+"/api":"");if(endpoint)try{const r=await fetch(endpoint+"/coach",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});const d=await r.json().catch(()=>({}));if(r.ok&&(d.message||d.coach)){setCoach(d.message||d.coach);setCoachLoading(false);return}}catch(e){}const msg=health.sleepMin!==null&&health.sleepMin<390?"😴 Récupération prioritaire : sommeil insuffisant. Fais une séance plus légère et évite le cardio supplémentaire.":jjb&&remaining>500?`🥋 JJB ce soir : il te manque ${remaining} kcal. Ajoute glucides + protéines avant le cours.`:pRemain>25?`🥩 Il te manque ${pRemain} g de protéines. Priorité à une vraie source protéinée.`:remaining>400?`🍚 Il te reste ${remaining} kcal. Ne termine pas la journée trop bas.`:"✅ Très bonne journée. Continue sans chercher la perfection.";setCoach(msg);setCoachLoading(false)}
+  /** Ce que l'app sait déjà : le coach doit le recevoir, sinon il ne peut rien justifier. */
+  function buildCoachPayload(){
+    const day=dayByKey(dayKeyForDate()),workout=WORKOUTS[day.name];
+    const planned=(workout.type==="STRENGTH"?workout.exercises:[]).map(ex=>{
+      const shown=exerciseOverrides[ex.id]||ex;
+      const hist=historyForExercise(trainingHistory,shown.id);
+      const rec=recommendNextLoad({exercise:shown,history:hist,context:progressionContext});
+      const last=hist.length?hist[hist.length-1]:null;
+      return {name:shown.name,sets:shown.sets,reps:`${shown.minReps}-${shown.maxReps}`,
+        recommendedLoad:rec.recommendedLoad,lastLoad:last?last.actualLoad:null,
+        action:rec.action,reason:rec.reasons&&rec.reasons[0]};
+    });
+    return {
+      profile:{weight:currentWeight,age:profile?.age,heightCm:profile?.heightCm,sex:profile?.sex,
+        goal:profile?.goal,targets,phase:phase.key,maintenance:profile?maintenanceCalories(profile):null},
+      today:{date:iso(),total,steps:stepValue,sleepMin:health.sleepMin,gym,jjb,water,waterTarget},
+      week:weeklySummary(journalRef.current,targets,7),
+      plateau,
+      recovery,
+      planned,
+      recentWorkouts:trainingHistory.slice(-30),
+      coachContext:{autopilot,hardDay,caffeine,restaurantMode,dayStreak}
+    };
+  }
+
+  function localCoachAdvice(){
+    if(health.sleepMin!==null&&health.sleepMin<390) return "😴 Récupération prioritaire : sommeil insuffisant. Fais une séance plus légère et évite le cardio supplémentaire.";
+    if(jjb&&remaining>500) return `🥋 JJB ce soir : il te manque ${remaining} kcal. Ajoute glucides + protéines avant le cours.`;
+    if(pRemain>25) return `🥩 Il te manque ${pRemain} g de protéines. Priorité à une vraie source protéinée.`;
+    if(remaining>400) return `🍚 Il te reste ${remaining} kcal. Ne termine pas la journée trop bas.`;
+    return "✅ Très bonne journée. Continue sans chercher la perfection.";
+  }
+
+  async function analyze(){
+    setCoachLoading(true);
+    const endpoint=AI_BASE_URL||((typeof window!=="undefined"&&window.location?.origin)?window.location.origin+"/api":"");
+    if(endpoint)try{
+      const r=await fetch(endpoint+"/coach",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(buildCoachPayload())});
+      const d=await r.json().catch(()=>({}));
+      if(r.status===429){setCoach(`⏳ ${d.message||"Trop de demandes coup sur coup."} (réessaie dans ${d.retryAfter||60} s)`);setCoachLoading(false);return}
+      if(r.ok&&(d.message||d.coach)){setCoach(d.message||d.coach);setCoachLoading(false);return}
+    }catch(e){}
+    setCoach(localCoachAdvice());
+    setCoachLoading(false);
+  }
   async function weeklyAnalysis(){
     // Vraie moyenne sur les 7 dernières journées enregistrées, plus les totaux du jour seuls.
     const summary=weeklySummary(journalRef.current,targets,7);
@@ -565,7 +610,6 @@ export default function App(){
 
   function generateGroceries(){setGroceryList(buildGroceryList({budget,weeklyCalories:targets.calories*7,weeklyProtein:targets.protein*7}))}
 
-  const progressionContext={sleepMin:health.sleepMin,fatigue:hardDay?5:2,proteinRatio:total.protein/targets.protein,calorieRatio:total.calories/targets.calories,hydrationRatio:water/waterTarget,jjbSessions:jjb?1:0,cardioSessions:jjb?1:0};
   // Les écrans sont des composants de module : identité stable entre deux rendus,
   // donc plus de remontage ni de perte de scroll, et seul l'écran actif est construit.
   const app={phase,remaining,total,targets,stepValue,coach,coachLoading,analyze,autopilotActions,generateWeek,setTab,health,quality,jjb,gym,todayWorkout,water,waterTarget,setWaterAmount,addWater,caffeine,setCaffeine,recovery,dayStreak,

@@ -2,7 +2,7 @@ const fs=require("fs"),path=require("path"),assert=require("assert");
 const root=path.resolve(__dirname,"../..");
 const required=[
 "App.js","package.json","app.json","src/core/autopilot.js","src/core/featureFlags.js",
-"src/core/progression.js","src/core/groceryPlanner.js","src/core/history.js","src/core/profile.js","src/features/training/program.js",
+"src/core/progression.js","src/core/groceryPlanner.js","src/core/history.js","src/core/profile.js","server/rateLimit.js","src/features/training/program.js",
 "src/core/intelligence.js","src/design/theme.js","src/pwa.js","public/index.html","public/sw.js","public/manifest.webmanifest",
 "src/domain/model.js","src/types/contracts.js","src/services/health/sleepAutoDetection.js",
 "src/services/storage/store.js","src/services/storage/memory.js","src/services/storage/privacy.js",
@@ -43,6 +43,21 @@ assert(/minHeight:\s*LAYOUT\.tapTarget/.test(appSource),"interactive rows must r
 assert(appSource.includes("computeTargets"),"App.js must derive targets from the profile");
 assert(!appSource.includes("Salut Yacine"),"the greeting must come from the saved profile");
 for(const wired of ["isProfileComplete","ACTIVITY_LEVELS","Onboarding"]) assert(appSource.includes(wired),`${wired} must be wired into App.js`);
+
+// Coach IA : la clé OpenRouter est une ressource limitée et l'URL est publique.
+const coachSource=fs.readFileSync(path.join(root,"server/coach.js"),"utf8");
+assert(coachSource.includes("limiter.check"),"/api/coach must be rate limited before calling the provider");
+// On vérifie l'ordre DANS le handler : la définition de callOpenRouter apparaît plus haut dans le fichier.
+const handlerBody=coachSource.slice(coachSource.indexOf("async function coachHandler"));
+assert(handlerBody.indexOf("limiter.check")>-1&&handlerBody.indexOf("limiter.check")<handlerBody.indexOf("await callOpenRouter"),"the rate limit must run before the provider call");
+assert(handlerBody.includes("429"),"rate limited requests must answer 429");
+// La clé ne doit jamais fuir côté client.
+assert(!appSource.includes("process.env.OPENROUTER_API_KEY"),"the API key must never be read from the client bundle");
+assert(!appSource.includes("openrouter.ai"),"the client must call /api/coach, never OpenRouter directly");
+assert(!/sk-or-[A-Za-z0-9]/.test(appSource),"no OpenRouter key literal may appear in App.js");
+// Le coach doit recevoir ce que l'app a calculé, sinon il ne peut rien justifier.
+for(const field of ["week","plateau","recovery","planned"]) assert(coachSource.includes(`${field}:`)||coachSource.includes(`${field} =`),`coach payload must carry ${field}`);
+assert(appSource.includes("buildCoachPayload"),"App.js must build the enriched coach payload");
 
 // PWA : sans le lien manifest, l'app n'est pas installable sur iPhone.
 const indexHtml=fs.readFileSync(path.join(root,"public/index.html"),"utf8");
