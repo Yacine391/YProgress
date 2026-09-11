@@ -1,13 +1,19 @@
 const fs=require("fs"),path=require("path"),assert=require("assert");
 const root=path.resolve(__dirname,"../..");
 const required=[
-"App.js","package.json","app.json","src/core/autopilot.js","src/core/featureFlags.js",
-"src/core/progression.js","src/core/groceryPlanner.js","src/core/history.js","src/core/profile.js","server/rateLimit.js","server/health.js","api/health.js","api/coach.js","src/features/training/program.js",
-"src/core/intelligence.js","src/design/theme.js","src/pwa.js","public/index.html","public/sw.js","public/manifest.webmanifest",
-"src/domain/model.js","src/types/contracts.js","src/services/health/sleepAutoDetection.js",
-"src/services/storage/store.js","src/services/storage/memory.js","src/services/storage/privacy.js",
-"src/services/storage/offlineQueue.js","src/services/analytics/events.js",
-"src/services/ai/foodInventory.js","server/index.js","docs/NEW_IDEAS_V9.md"
+"App.js","package.json","app.json",
+// Moteur
+"src/core/autopilot.js","src/core/intelligence.js","src/core/progression.js",
+"src/core/history.js","src/core/profile.js","src/core/groceryPlanner.js","src/core/featureFlags.js",
+"src/features/training/program.js",
+// Infrastructure
+"src/services/storage/store.js","src/services/health/sleepAutoDetection.js",
+"src/design/theme.js","src/pwa.js",
+// Serveur IA
+"server/coach.js","server/health.js","server/rateLimit.js","server/index.js",
+"api/coach.js","api/health.js",
+// PWA
+"public/index.html","public/sw.js","public/manifest.webmanifest"
 ];
 for(const f of required) assert(fs.existsSync(path.join(root,f)),`missing ${f}`);
 const pkg=JSON.parse(fs.readFileSync(path.join(root,"package.json")));
@@ -42,7 +48,8 @@ assert(/minHeight:\s*LAYOUT\.tapTarget/.test(appSource),"interactive rows must r
 // Onboarding : les objectifs doivent venir du profil, plus de constantes personnelles.
 assert(appSource.includes("computeTargets"),"App.js must derive targets from the profile");
 assert(!appSource.includes("Salut Yacine"),"the greeting must come from the saved profile");
-for(const wired of ["isProfileComplete","ACTIVITY_LEVELS","Onboarding"]) assert(appSource.includes(wired),`${wired} must be wired into App.js`);
+for(const wired of ["ACTIVITY_LEVELS","SEXES","saveProfile"]) assert(appSource.includes(wired),`${wired} must be wired into App.js`);
+assert(!appSource.includes("function Onboarding"),"the blocking first-run screen must stay removed");
 
 // Coach IA : la clé OpenRouter est une ressource limitée et l'URL est publique.
 const coachSource=fs.readFileSync(path.join(root,"server/coach.js"),"utf8");
@@ -82,4 +89,15 @@ for(const tag of ['rel="manifest"','apple-mobile-web-app-capable','apple-touch-i
 const sw=fs.readFileSync(path.join(root,"public/sw.js"),"utf8");
 assert(sw.includes("networkFirst")&&sw.includes('request.mode === "navigate"'),"sw.js must serve navigation network-first");
 assert(sw.includes("caches.delete"),"sw.js must clean up outdated caches");
+// Aucun module ne doit exister sans être importé : le projet a déjà porté
+// 12 fichiers d'échafaudage testés mais jamais branchés.
+const srcFiles=[];
+(function walk(dir){for(const e of fs.readdirSync(dir,{withFileTypes:true})){const full=path.join(dir,e.name);if(e.isDirectory())walk(full);else if(e.name.endsWith(".js"))srcFiles.push(full)}})(path.join(root,"src"));
+const allImports=["App.js",...srcFiles.map(f=>path.relative(root,f))].map(f=>fs.readFileSync(path.join(root,f),"utf8")).join("\n");
+for(const file of srcFiles){
+  const name=path.basename(file,".js");
+  const rel=path.relative(root,file);
+  const imported=new RegExp(`from ["'][^"']*/${name}["']|from ["']\\./${name}["']|require\\(["'][^"']*/${name}`).test(allImports);
+  assert(imported,`${rel} is never imported — dead scaffolding`);
+}
 console.log("PASS static foundation checks");

@@ -1,35 +1,63 @@
-# YProgress V15 — AI Coach
+# YProgress
 
-Application Expo mobile-first de nutrition, récupération et entraînement adaptatif. Le moteur déterministe calcule les charges suivantes à partir des performances réelles et du contexte de récupération ; OpenRouter sert uniquement à expliquer et coacher.
+Coach sportif et nutritionnel personnel. Application locale mono-utilisateur,
+déployée en PWA sur Vercel.
 
-Test UI:
+## Lancer
+
 ```bash
 npm install
-npx expo start
+npm start            # Expo (iOS / Android / web)
+npm run web          # web uniquement
+npm run build:web    # export de production dans dist/
+npm test             # suite complète (statique + moteur)
 ```
 
-Architecture:
-- `src/domain` : règles métier
-- `src/services` : stockage, HealthKit, IA, notifications
-- `src/features/training` : programme hebdomadaire et données d'exercices
-- `src/core/progression.js` : moteur déterministe de progression des charges
-- `server` : API IA sécurisée
-- `docs` : architecture et roadmap
+Node 22.12 ou plus : les tests chargent les modules ESM via `require()`.
 
-HealthKit nécessite une capability native iOS et des permissions utilisateur. Pour le développement iOS, utiliser une development build EAS.
+## Structure
 
+```
+App.js                      Écrans et état de l'application
+src/core/
+  profile.js                Objectifs calculés (Mifflin-St Jeor + garde-fous)
+  history.js                Journal quotidien persistant, bilans, dette de sommeil
+  progression.js            Charges recommandées d'une semaine sur l'autre
+  autopilot.js              Priorités du jour, détection de plateau, récupération
+  intelligence.js           Recommandation de sommeil, apprentissage hebdomadaire
+  groceryPlanner.js         Liste de courses sous contrainte de budget
+  featureFlags.js           Intégrations natives désactivées tant qu'absentes
+src/features/training/      Programme, exercices, vidéos, curriculum JJB
+src/services/storage/       Accès unique au stockage (namespace versionné)
+src/services/health/        Détection de sommeil (confirmé / estimé / inconnu)
+src/design/theme.js         Tokens de design — aucune couleur en dur ailleurs
+server/                     Endpoints IA (coach, health, limitation de débit)
+api/                        Points d'entrée Vercel vers server/
+tests/                      Suite de non-régression
+```
 
-## V9 intelligence foundation
-Sleep auto-detection, Sleep Coach, cumulative fatigue, fridge/pantry inventory, grocery/budget contracts, receipt/restaurant contracts, coach memory, habit learning, uncertainty, privacy, offline queue and iOS feature flags are prepared. Native providers remain disabled until implemented.
+## Coach IA
 
-## V15 — Coach IA réel
+La clé OpenRouter reste côté serveur. Elle ne doit jamais apparaître dans une
+variable `EXPO_PUBLIC_*` : elle finirait dans le bundle navigateur.
 
-Le bouton « Analyser ma journée » appelle `/api/coach` sur Vercel. La clé OpenRouter reste côté serveur.
+Variables Vercel (Settings → Environment Variables, puis **redéployer**) :
 
-### Variables Vercel
+| Variable | Valeur |
+|---|---|
+| `OPENROUTER_API_KEY` | `sk-or-v1-…` |
+| `OPENROUTER_MODEL` | `google/gemma-4-31b-it:free` |
+| `APP_URL` | `https://y-progress.vercel.app` |
 
-- `OPENROUTER_API_KEY`
-- `OPENROUTER_MODEL` = `openrouter/free`
-- `APP_URL` = URL du site
+Vérification : `https://y-progress.vercel.app/api/health` doit renvoyer
+`"status": "READY"`.
 
-Le client web n'embarque aucune clé secrète. Sans serveur IA disponible, l'application garde son conseil local de secours.
+## Règles de développement
+
+1. Modifier le module responsable, pas seulement `App.js`.
+2. Ajouter ou adapter les tests.
+3. `npm test` puis `npm run build:web` doivent passer avant tout commit.
+
+La suite statique refuse notamment : une couleur en dur dans `App.js`, un écran
+déclaré à l'intérieur de `App()`, un module jamais importé, un accès direct à
+AsyncStorage, et l'absence de limitation de débit avant l'appel au fournisseur IA.

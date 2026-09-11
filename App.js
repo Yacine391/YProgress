@@ -19,7 +19,8 @@ import {SEXES,ACTIVITY_LEVELS,GOALS,computeTargets,isProfileComplete,maintenance
 import {palette as P,glass as GL,gradient as GR,space as SP,radius as RD,type as T,font as F,shadow as SH,LAYOUT,metricColumns,typeScale} from "./src/design/theme";
 
 const BASE={calories:2500,protein:110,fat:70,steps:10000,sleepMin:450};
-const BLANK_PROFILE={name:"",sex:"unspecified",age:"",heightCm:"",weight:"",activity:"moderate",goal:"lean_gain",sleepMin:450};
+// Application personnelle : le profil est pré-rempli, modifiable depuis l'onglet Profil.
+const MY_PROFILE={name:"Yacine",sex:"male",age:21,heightCm:170,weight:55,activity:"moderate",goal:"lean_gain",sleepMin:450};
 const AI_BASE_URL=(process.env.EXPO_PUBLIC_AI_BASE_URL||"").replace(/\/$/,"");
 const fr=n=>String(n).replace(".",",");
 const iso=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`};
@@ -103,85 +104,6 @@ function ExerciseSwapModal({slot,onClose,onSelect}){
     <Text style={S.swapTitle}>MON EXERCICE PERSONNALISÉ</Text><Field label="Nom de l’exercice" value={name} onChange={setName}/><Field label="Charge de départ (kg)" value={load} onChange={setLoad} keyboardType="decimal-pad"/><Field label="ID YouTube facultatif" value={videoId} onChange={setVideoId}/><Button title="Ajouter à mes exercices" onPress={saveCustom}/>
     <Button title="Annuler" onPress={onClose} secondary/>
   </ScrollView></View></Modal>
-}
-
-/**
- * Première utilisation : sans ces mesures, les objectifs ne seraient que
- * des constantes. Le parcours est découpé en étapes courtes, une décision
- * par écran, ce qui reste confortable sur téléphone.
- */
-function Onboarding({initial,onDone,onSkip,canSkip}){
-  const [step,setStep]=useState(0);
-  const [draft,setDraft]=useState({...BLANK_PROFILE,...(initial||{})});
-  const set=(key,value)=>setDraft(d=>({...d,[key]:value}));
-  const preview=computeTargets(draft);
-  const complete=isProfileComplete(draft);
-  const range=expectedWeeklyRange(draft.goal);
-
-  const steps=[
-    {key:"name",title:"Bienvenue",lead:"Comment veux-tu qu'on t'appelle ?",
-      valid:()=>true,
-      body:<Field label="Prénom (facultatif)" value={String(draft.name||"")} onChange={v=>set("name",v)} placeholder="Ton prénom"/>},
-    {key:"who",title:"Toi",lead:"Le métabolisme de base dépend de ces deux valeurs.",
-      valid:()=>Number(draft.age)>=14&&Number(draft.age)<=99,
-      body:<>
-        <Text style={S.label}>Sexe biologique</Text>
-        <View style={S.toggle}>{SEXES.map(o=><Pill key={o.id} active={draft.sex===o.id} onPress={()=>set("sex",o.id)}>{o.label}</Pill>)}</View>
-        <Field label="Âge" value={String(draft.age||"")} onChange={v=>set("age",v)} keyboardType="numeric" placeholder="21"/>
-        <Text style={S.muted}>Utilisé uniquement pour l'équation de Mifflin-St Jeor. Rien ne quitte ton téléphone.</Text>
-      </>},
-    {key:"body",title:"Mesures",lead:"Tes objectifs en découlent directement.",
-      valid:()=>Number(draft.heightCm)>=120&&Number(draft.heightCm)<=230&&Number(draft.weight)>=30&&Number(draft.weight)<=250,
-      body:<>
-        <Field label="Taille (cm)" value={String(draft.heightCm||"")} onChange={v=>set("heightCm",v)} keyboardType="numeric" placeholder="170"/>
-        <Field label="Poids actuel (kg)" value={String(draft.weight||"")} onChange={v=>set("weight",v)} keyboardType="decimal-pad" placeholder="55"/>
-      </>},
-    {key:"activity",title:"Activité",lead:"En dehors de tes séances de musculation.",
-      valid:()=>true,
-      body:<View style={{gap:SP.sm}}>{ACTIVITY_LEVELS.map(o=><Pressable key={o.id} onPress={()=>set("activity",o.id)} style={({pressed})=>[S.choice,draft.activity===o.id&&S.choiceActive,pressed&&S.buttonPressed]}>
-        <View style={{flex:1}}><Text style={S.choiceTitle}>{o.label}</Text><Text style={S.muted}>{o.hint}</Text></View>
-        <View style={[S.radio,draft.activity===o.id&&S.radioOn]}/>
-      </Pressable>)}</View>},
-    {key:"goal",title:"Objectif",lead:"Il fixe l'écart aux calories de maintenance.",
-      valid:()=>true,
-      body:<View style={{gap:SP.sm}}>{GOALS.map(o=><Pressable key={o.id} onPress={()=>set("goal",o.id)} style={({pressed})=>[S.choice,draft.goal===o.id&&S.choiceActive,pressed&&S.buttonPressed]}>
-        <View style={{flex:1}}><Text style={S.choiceTitle}>{o.label}</Text><Text style={S.muted}>{o.adjust>0?"Surplus contrôlé":o.adjust<0?"Déficit modéré":"Calories de maintenance"}</Text></View>
-        <View style={[S.radio,draft.goal===o.id&&S.radioOn]}/>
-      </Pressable>)}</View>},
-    {key:"recap",title:"Tes objectifs",lead:"Calculés à partir de ce que tu viens de renseigner.",
-      valid:()=>complete,
-      body:<>
-        {!complete&&<Text style={S.reason}>Il manque une mesure : reviens en arrière pour compléter.</Text>}
-        <View style={S.recapRow}><Text style={S.recapLabel}>Calories</Text><Text style={S.recapValue}>{preview.calories} kcal</Text></View>
-        <View style={S.recapRow}><Text style={S.recapLabel}>Protéines</Text><Text style={S.recapValue}>{preview.protein} g</Text></View>
-        <View style={S.recapRow}><Text style={S.recapLabel}>Lipides</Text><Text style={S.recapValue}>{preview.fat} g</Text></View>
-        <View style={S.recapRow}><Text style={S.recapLabel}>Pas</Text><Text style={S.recapValue}>{preview.steps}</Text></View>
-        <View style={S.recapRow}><Text style={S.recapLabel}>Rythme visé</Text><Text style={S.recapValue}>{range.low>0?"+":""}{fr(range.low)} à {range.high>0?"+":""}{fr(range.high)} kg/sem</Text></View>
-        <Text style={S.swapTitle}>D'OÙ VIENNENT CES CHIFFRES</Text>
-        {preview.rationale.map((r,i)=><View key={i} style={S.priorityRow}><Text style={S.check}>·</Text><Text style={S.muted}>{r}</Text></View>)}
-        <Text style={S.restFoot}>Tu pourras tout ajuster à la main depuis l'onglet Profil.</Text>
-      </>}
-  ];
-  const current=steps[step],last=step===steps.length-1;
-
-  return <Modal visible transparent={false} animationType="slide" onRequestClose={()=>step>0&&setStep(step-1)}>
-    <SafeAreaView style={S.safe}>
-      <ScrollView contentContainerStyle={S.onbContent} keyboardShouldPersistTaps="handled">
-        <View style={S.onbProgress}>{steps.map((st,i)=><View key={st.key} style={[S.onbDot,i<=step&&S.onbDotOn]}/>)}</View>
-        <Text style={S.eyebrow}>ÉTAPE {step+1} / {steps.length}</Text>
-        <Text style={S.title}>{current.title}</Text>
-        <Text style={S.muted}>{current.lead}</Text>
-        <View style={S.onbBody}>{current.body}</View>
-        <Button title={last?"C'est parti":"Continuer"} onPress={()=>{
-          if(!current.valid()) return Alert.alert("Valeur manquante","Renseigne une valeur réaliste pour continuer.");
-          if(last) return onDone(draft);
-          setStep(step+1);
-        }}/>
-        {step>0&&<Button title="Retour" onPress={()=>setStep(step-1)} secondary/>}
-        {step===0&&canSkip&&<Button title="Garder mes objectifs actuels" onPress={onSkip} secondary/>}
-      </ScrollView>
-    </SafeAreaView>
-  </Modal>;
 }
 
 function ProgramPage({selectedDayKey,setSelectedDayKey,week,setWeek,drafts,onSaveSet,history,onComplete,hardDay,onEmergency,progressionContext,exerciseOverrides,onReplaceExercise}){
@@ -315,19 +237,20 @@ return <ScrollView key="progress" contentContainerStyle={S.content}><Text style=
     <Text style={S.text}>Variation de poids : {weekly.weightChange>0?"+":""}{fr(weekly.weightChange||0)} kg</Text>
     <Text style={S.muted}>Moyenne réelle sur les 7 dernières journées enregistrées.</Text>
     <Button title="Calculer mon bilan" onPress={weeklyAnalysis}/></Card>
-  <Card><Text style={S.section}>📸 Timeline physique</Text><Text style={S.muted}>Semaine 1 → 4 → 8 → 12 → 16 → 20 → 24. Comparaison de photos dans la build native.</Text></Card>
 </ScrollView>}
 
 function Profile({app}){
-const {targets,dynamicCarbs,notifications,scheduleNotifications,saveTargets,recovery,profile,openOnboarding}=app;
-const computed=profile?computeTargets(profile):null;
+const {targets,dynamicCarbs,notifications,scheduleNotifications,saveTargets,saveProfile,recovery,profile}=app;
+const [measures,setMeasures]=useState(null);
+const editingMeasures=measures!==null;
+const computed=profile?computeTargets(measures||profile):null;
 const goalLabelFor=id=>(GOALS.find(g=>g.id===id)||GOALS[0]).label;
 const activityLabel=profile?(ACTIVITY_LEVELS.find(a=>a.id===profile.activity)||ACTIVITY_LEVELS[1]).label:"";
 const [draft,setDraft]=useState(null);
 const editing=draft!==null;
 const field=key=>String(draft?.[key]??"");
 function openEditor(){setDraft({...targets})}
-async function saveProfile(){await saveTargets(draft);setDraft(null);Alert.alert("Profil enregistré","Tes objectifs sont sauvegardés et servent maintenant de base au coach.")}
+async function saveManualTargets(){await saveTargets(draft);setDraft(null);Alert.alert("Objectifs enregistrés","Tes chiffres remplacent le calcul automatique jusqu'à ta prochaine mise à jour de mesures.")}
 const goalLabel=profile?goalLabelFor(profile.goal):"Objectifs manuels";
 return <ScrollView key="profile" contentContainerStyle={S.content} keyboardShouldPersistTaps="handled"><Text style={S.title}>⚙️ Profil</Text>
   <Card><View style={S.cardHead}><Text style={S.section}>Tes bases</Text><Text style={S.ai}>{goalLabel.toUpperCase()}</Text></View>
@@ -337,8 +260,29 @@ return <ScrollView key="profile" contentContainerStyle={S.content} keyboardShoul
       : <Text style={S.muted}>Profil non renseigné : tes objectifs ne sont pas encore calculés à partir de tes mesures.</Text>}
     <Text style={S.muted}>{targets.calories} kcal • {targets.protein} g protéines • {targets.fat} g lipides • ~{dynamicCarbs} g glucides</Text>
     <Text style={S.muted}>{targets.steps} pas • {Math.floor(targets.sleepMin/60)}h{String(targets.sleepMin%60).padStart(2,"0")} de sommeil visés</Text>
-    {!editing&&<Button title={profile?"Mettre à jour mes mesures":"Calculer mes objectifs"} onPress={openOnboarding}/>}
-    {!editing&&<Button title="Ajuster les chiffres à la main" onPress={openEditor} secondary/>}
+    {!editing&&!editingMeasures&&<Button title="Mettre à jour mes mesures" onPress={()=>setMeasures({...profile})}/>}
+    {!editing&&!editingMeasures&&<Button title="Ajuster les objectifs à la main" onPress={openEditor} secondary/>}
+    {editingMeasures&&<View style={S.editBlock}>
+      <Field label="Prénom" value={String(measures.name||"")} onChange={v=>setMeasures({...measures,name:v})}/>
+      <Field label="Âge" value={String(measures.age||"")} onChange={v=>setMeasures({...measures,age:v})} keyboardType="numeric"/>
+      <Field label="Taille (cm)" value={String(measures.heightCm||"")} onChange={v=>setMeasures({...measures,heightCm:v})} keyboardType="numeric"/>
+      <Field label="Poids de référence (kg)" value={String(measures.weight||"")} onChange={v=>setMeasures({...measures,weight:v})} keyboardType="decimal-pad"/>
+      <Text style={S.swapTitle}>SEXE BIOLOGIQUE</Text>
+      <View style={S.toggle}>{SEXES.map(o=><Pill key={o.id} active={measures.sex===o.id} onPress={()=>setMeasures({...measures,sex:o.id})}>{o.label}</Pill>)}</View>
+      <Text style={S.swapTitle}>ACTIVITÉ HORS MUSCULATION</Text>
+      <View style={{gap:SP.sm}}>{ACTIVITY_LEVELS.map(o=><Pressable key={o.id} onPress={()=>setMeasures({...measures,activity:o.id})} style={({pressed})=>[S.choice,measures.activity===o.id&&S.choiceActive,pressed&&S.buttonPressed]}>
+        <View style={{flex:1}}><Text style={S.choiceTitle}>{o.label}</Text><Text style={S.muted}>{o.hint}</Text></View>
+        <View style={[S.radio,measures.activity===o.id&&S.radioOn]}/>
+      </Pressable>)}</View>
+      <Text style={S.swapTitle}>OBJECTIF</Text>
+      <View style={{gap:SP.sm}}>{GOALS.map(o=><Pressable key={o.id} onPress={()=>setMeasures({...measures,goal:o.id})} style={({pressed})=>[S.choice,measures.goal===o.id&&S.choiceActive,pressed&&S.buttonPressed]}>
+        <View style={{flex:1}}><Text style={S.choiceTitle}>{o.label}</Text><Text style={S.muted}>{o.adjust>0?"Surplus contrôlé":o.adjust<0?"Déficit modéré":"Calories de maintenance"}</Text></View>
+        <View style={[S.radio,measures.goal===o.id&&S.radioOn]}/>
+      </Pressable>)}</View>
+      {computed&&computed.bmr>0&&<Text style={S.reason}>Ces mesures donnent {computed.calories} kcal et {computed.protein} g de protéines par jour.</Text>}
+      <Button title="Recalculer mes objectifs" onPress={async()=>{const c=await saveProfile(measures);setMeasures(null);Alert.alert("Mesures enregistrées",`Nouveaux objectifs : ${c.calories} kcal et ${c.protein} g de protéines.`)}}/>
+      <Button title="Annuler" onPress={()=>setMeasures(null)} secondary/>
+    </View>}
     {editing&&<View style={S.editBlock}>
       <Text style={S.muted}>Ces valeurs remplacent le calcul automatique jusqu'à ta prochaine mise à jour de mesures.</Text>
       <Field label="Calories par jour" value={field("calories")} onChange={v=>setDraft({...draft,calories:v})} keyboardType="numeric"/>
@@ -346,7 +290,7 @@ return <ScrollView key="profile" contentContainerStyle={S.content} keyboardShoul
       <Field label="Lipides par jour (g)" value={field("fat")} onChange={v=>setDraft({...draft,fat:v})} keyboardType="numeric"/>
       <Field label="Pas par jour" value={field("steps")} onChange={v=>setDraft({...draft,steps:v})} keyboardType="numeric"/>
       <Field label="Sommeil visé (minutes)" value={field("sleepMin")} onChange={v=>setDraft({...draft,sleepMin:v})} keyboardType="numeric"/>
-      <Button title="Enregistrer mes objectifs" onPress={saveProfile}/>
+      <Button title="Enregistrer mes objectifs" onPress={saveManualTargets}/>
       <Button title="Annuler" onPress={()=>setDraft(null)} secondary/>
     </View>}
   </Card>
@@ -360,8 +304,6 @@ return <ScrollView key="profile" contentContainerStyle={S.content} keyboardShoul
   <Card><View style={S.switchLine}><View><Text style={S.section}>🔔 Notifications intelligentes</Text><Text style={S.muted}>Repas • entraînement • sommeil</Text></View><Switch value={notifications} onValueChange={scheduleNotifications} trackColor={{false:P.surfaceHigh,true:P.limeDeep}} thumbColor={notifications?P.lime:P.inkMuted} ios_backgroundColor={P.surfaceHigh}/></View></Card>
   <Card><View style={S.cardHead}><Text style={S.section}>❤️ Apple Santé</Text><Text style={S.ai}>{FEATURES.healthKit?"ACTIF":"HORS LIGNE"}</Text></View><Text style={S.text}>Pas • sommeil • poids • énergie active</Text><Text style={S.muted}>{FEATURES.healthKit?"Les données confirmées par HealthKit sont prioritaires sur les estimations.":"HealthKit s'active dans une development build iOS. En attendant, saisis tes pas et ton sommeil à la main : rien n'est inventé."}</Text></Card>
   <Card><Text style={S.section}>🔐 Confidentialité</Text><Text style={S.muted}>La clé IA reste sur le serveur. L'application ne doit jamais embarquer OPENROUTER_API_KEY.</Text></Card>
-  <Card><Text style={S.section}>🎙️ Entrée vocale</Text><Text style={S.muted}>Prévue : « J'ai mangé 200 g de poulet et 150 g de riz » → journal automatique.</Text></Card>
-  <Card><Text style={S.section}>📱 Widget iPhone</Text><Text style={S.muted}>Prévu : calories, protéines, pas et sommeil directement sur l'écran d'accueil.</Text></Card>
 </ScrollView>}
 
 export default function App(){
@@ -382,7 +324,7 @@ export default function App(){
   const [foodDraft,setFoodDraft]=useState({name:"",calories:"",protein:"",carbs:"",fat:""});
   const [groceryList,setGroceryList]=useState(null),[groceryChecked,setGroceryChecked]=useState([]),[exerciseOverrides,setExerciseOverrides]=useState({});
   const [journal,setJournal]=useState([]),[ready,setReady]=useState(false);
-  const [profile,setProfile]=useState(null),[onboarding,setOnboarding]=useState(false);
+  const [profile,setProfile]=useState(MY_PROFILE);
   const journalRef=useRef([]);
 
   useEffect(()=>{(async()=>{
@@ -391,11 +333,9 @@ export default function App(){
     setLogs((Array.isArray(all)?all:[]).filter(x=>x.date===iso()));
     const savedWeights=await store.get(KEYS.weights,[]);setWeights(Array.isArray(savedWeights)?savedWeights:[]);
     const t=await store.get(KEYS.targets,null);if(t&&typeof t==="object")setTargets({...BASE,...t});
-    // Pas de profil enregistré : on propose le parcours d'accueil.
-    // Un utilisateur qui avait déjà des objectifs peut le refuser sans les perdre.
     const savedProfile=await store.get(KEYS.profile,null);
-    if(savedProfile&&typeof savedProfile==="object") setProfile(savedProfile);
-    else setOnboarding(true);
+    if(savedProfile&&typeof savedProfile==="object") setProfile({...MY_PROFILE,...savedProfile});
+    else if(!t) await saveProfile(MY_PROFILE); // premier lancement : objectifs calculés d'office
     const w=await store.get(KEYS.weekly,null);if(w&&typeof w==="object")setWeekly(w);
     const wd=await store.get(KEYS.workoutLogs,{});setWorkoutLogs(wd&&typeof wd==="object"?wd:{});
     const th=await store.get(KEYS.trainingHistory,[]);setTrainingHistory(Array.isArray(th)?th:[]);
@@ -644,8 +584,7 @@ export default function App(){
     const derived={calories:computed.calories,protein:computed.protein,fat:computed.fat,steps:computed.steps,sleepMin:computed.sleepMin};
     setTargets(derived);
     await store.set(KEYS.targets,derived);
-    if(clean.weight>0){setWeight(String(clean.weight));await recordToday({weight:clean.weight});}
-    setOnboarding(false);
+    if(clean.weight>0) setWeight(String(clean.weight));
     return computed;
   }
 
@@ -690,7 +629,7 @@ export default function App(){
     foodDraft,setFoodDraft,restaurantChoice,photoMeal,photo,setPhoto,restaurantMode,pRemain,budget,changeBudget,generateGroceries,groceryList,groceryChecked,toggleGrocery,clearGroceries,dynamicCarbs,addLog,
     currentWeight,weight,setWeight,saveWeight,sleep,setSleep,wake,setWake,setQuality,saveSleep,weekly,weeklyAnalysis,plateau,sleepAdvice,journal,
     notifications,scheduleNotifications,saveTargets,setStepCount,ready,
-    profile,saveProfile,openOnboarding:()=>setOnboarding(true),coachStatus,coachSource};
+    profile,saveProfile,coachStatus,coachSource};
   const pages={
     home:<Home app={app}/>,
     nutrition:<Nutrition app={app}/>,
@@ -698,7 +637,6 @@ export default function App(){
     progress:<ProgressPage app={app}/>,
     profile:<Profile app={app}/>
   };
-  if(ready&&onboarding) return <><StatusBar style="light"/><Onboarding initial={profile} canSkip={Boolean(targets&&targets.calories)} onSkip={()=>setOnboarding(false)} onDone={async d=>{const c=await saveProfile(d);Alert.alert("Profil enregistré",`Objectif : ${c.calories} kcal et ${c.protein} g de protéines par jour.`)}}/></>;
   return <SafeAreaView style={S.safe}><StatusBar style="light"/>{pages[tab]}<View style={S.navWrap} pointerEvents="box-none"><View style={S.bottom}>{[["home","🏠","Accueil"],["nutrition","🍽️","Nutrition"],["program","🏋️","Programme"],["progress","📈","Progrès"],["profile","⚙️","Profil"]].map(([id,ic,l])=><Pressable accessibilityRole="tab" accessibilityState={{selected:tab===id}} key={id} onPress={()=>setTab(id)} style={({pressed})=>[S.nav,tab===id&&S.navActive,pressed&&S.buttonPressed]}><Text style={[S.navIcon,tab===id&&S.navIconActive]}>{ic}</Text><Text style={[S.navText,tab===id&&S.navTextActive]} numberOfLines={1}>{l}</Text></Pressable>)}</View></View></SafeAreaView>
 }
 
