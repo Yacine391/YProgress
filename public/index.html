@@ -8,7 +8,7 @@
 
     <!-- PWA : sans ces balises l'app n'est pas installable proprement sur iPhone. -->
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#020A1A" />
+    <meta name="theme-color" content="#101210" />
     <meta name="description" content="Coach personnel nutrition, entraînement, récupération et progression." />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -35,7 +35,7 @@
       body {
         overflow: hidden;
         margin: 0;
-        background-color: #020A1A;
+        background-color: #101210;
         color-scheme: dark;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
@@ -58,6 +58,7 @@
       * {
         overscroll-behavior-x: contain;
       }
+      :focus-visible { outline: 2px solid #D3F36B !important; outline-offset: 3px; }
       /* Champs de saisie : 16px minimum, sinon iOS zoome automatiquement au focus. */
       input,
       textarea,
@@ -65,8 +66,8 @@
         font-size: 16px;
       }
       ::selection {
-        background: #7A49E3;
-        color: #ffffff;
+        background: #D3F36B;
+        color: #1F2B0A;
       }
     </style>
   </head>

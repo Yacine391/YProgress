@@ -2,10 +2,12 @@
 // Sans le updatefound/SKIP_WAITING, l'utilisateur reste sur l'ancien bundle jusqu'à
 // la fermeture complète de tous les onglets.
 
+let initialized=false;
 export function initPWA() {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
-
-  window.addEventListener("load", () => {
+  if(initialized)return;
+  initialized=true;
+  const register=() => {
     navigator.serviceWorker
       .register("/sw.js")
       .then((registration) => {
@@ -30,5 +32,7 @@ export function initPWA() {
       reloading = true;
       window.location.reload();
     });
-  });
+  };
+  if(document.readyState==='complete')register();
+  else window.addEventListener('load',register,{once:true});
 }

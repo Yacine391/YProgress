@@ -1,12 +1,7 @@
 {
   "name": "yprogress-ai-server",
   "private": true,
-  "version": "8.0.0",
-  "scripts": {
-    "start": "node index.js"
-  },
-  "dependencies": {
-    "express": "^5.1.0",
-    "cors": "^2.8.5"
-  }
+  "version": "17.0.0",
+  "scripts": { "start": "node --env-file-if-exists=../.env.local index.js" },
+  "engines": { "node": ">=22.12.0" }
 }

@@ -1,11 +1,11 @@
 {
   "name": "YProgress — Coach personnel",
   "short_name": "YProgress",
-  "description": "Coach personnel nutrition, entraînement, récupération et progression.",
+  "description": "Musculation, MMA, nutrition et progression. Un jour à la fois.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#020A1A",
-  "theme_color": "#020A1A",
+  "background_color": "#101210",
+  "theme_color": "#101210",
   "orientation": "portrait",
   "icons": [
     {

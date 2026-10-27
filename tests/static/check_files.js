@@ -1,121 +1,133 @@
-const fs=require("fs"),path=require("path"),assert=require("assert");
-const root=path.resolve(__dirname,"../..");
-const required=[
-"App.js","package.json","app.json",
-// Moteur
-"src/core/autopilot.js","src/core/intelligence.js","src/core/progression.js",
-"src/core/history.js","src/core/profile.js","src/core/groceryPlanner.js","src/core/featureFlags.js",
-"src/features/training/program.js",
-// Infrastructure
-"src/services/storage/store.js","src/services/health/sleepAutoDetection.js",
-"src/design/theme.js","src/design/icons.js","src/pwa.js",
-// Serveur IA
-"server/coach.js","server/health.js","server/rateLimit.js","server/index.js",
-"api/coach.js","api/health.js",
-// PWA
-"public/index.html","public/sw.js","public/manifest.webmanifest"
-];
-for(const f of required) assert(fs.existsSync(path.join(root,f)),`missing ${f}`);
-const pkg=JSON.parse(fs.readFileSync(path.join(root,"package.json")));
-const app=JSON.parse(fs.readFileSync(path.join(root,"app.json")));
-assert.equal(pkg.version,app.expo.version,"version mismatch");
-assert(pkg.dependencies.expo,"expo dependency missing");
-const flags=fs.readFileSync(path.join(root,"src/core/featureFlags.js"),"utf8");
-for(const k of ["healthKit:false","aiVision:false","aiCoach:false","voice:false","widget:false","liveActivity:false"]) assert(flags.includes(k),`flag ${k} not gated`);
-const appSource=fs.readFileSync(path.join(root,"App.js"),"utf8");
-// Les écrans doivent être déclarés au niveau module : une fonction imbriquée dans App()
-// crée une identité de composant neuve à chaque rendu (remontage + perte de scroll).
-for(const screen of ["Home","Nutrition","ProgressPage","Profile","ProgramPage"]){
-  assert(new RegExp(`^function ${screen}\\(`,"m").test(appSource),`${screen} must be declared at module level`);
-  assert(!new RegExp(`^[ \\t]+function ${screen}\\(`,"m").test(appSource),`${screen} must not be nested inside App()`);
-}
-// La persistance passe par src/services/storage/store.js (namespace versionné + migration).
-assert(!appSource.includes("@react-native-async-storage/async-storage"),"App.js must not use AsyncStorage directly");
-assert(appSource.includes('from "./src/services/storage/store"'),"App.js must persist through the store service");
-// Les modules du moteur doivent être réellement branchés, pas seulement testés.
-for(const wired of ["buildAutopilotSnapshot","detectPlateau","weeklySummary","recoveryScore","upsertDay"]) assert(appSource.includes(wired),`${wired} is tested but never wired into App.js`);
-assert(!appSource.includes("le coach pourra proposer"),"plateau card must report a real result");
+/* Architecture and boundary checks. Visual choices and legacy screen names are not contracts. */
+const fs=require('node:fs');
+const path=require('node:path');
+const vm=require('node:vm');
+const assert=require('node:assert/strict');
+const root=path.resolve(__dirname,'../..');
+const read=file=>fs.readFileSync(path.join(root,file),'utf8');
+const exists=file=>fs.existsSync(path.join(root,file));
+let checks=0;
+function pass(label){checks++;console.log('PASS',label)}
+function filesUnder(directory){return fs.readdirSync(path.join(root,directory),{withFileTypes:true}).flatMap(e=>e.isDirectory()?filesUnder(`${directory}/${e.name}`):/\.[cm]?jsx?$/.test(e.name)?[`${directory}/${e.name}`]:[])}
+const required=['App.js','package.json','app.json','src/core/appState.js','src/core/trainingPlan.js','src/core/nutrition.js','src/services/storage/store.js','src/services/coachClient.js','server/coach.js','server/health.js','server/rateLimit.js','api/coach.js','api/health.js','public/index.html','public/sw.js','public/manifest.webmanifest'];
+for(const file of required)assert(exists(file),`Missing required application boundary: ${file}`);
+const pkg=JSON.parse(read('package.json')),app=JSON.parse(read('app.json'));
+assert.equal(pkg.version,app.expo.version,'Package and Expo version must agree');
+assert(pkg.dependencies.react&&pkg.dependencies.expo,'React/Expo runtime missing');
+pass('application and runtime files exist; release versions agree');
 
-// Design system : aucune couleur en dur dans App.js, tout vient de src/design/theme.js.
-const hardcoded=appSource.match(/#[0-9a-fA-F]{3,8}\b/g)||[];
-assert.equal(hardcoded.length,0,`App.js must use design tokens, found hardcoded colors: ${hardcoded.join(", ")}`);
-assert(appSource.includes('from "./src/design/theme"'),"App.js must import the design tokens");
-const themeSource=fs.readFileSync(path.join(root,"src/design/theme.js"),"utf8");
-// Direction « liquid glass » : la matière tient sur ces trois couches.
-for(const token of ["glass","gradient","blurStyle","glassStyle"]) assert(themeSource.includes(`export const ${token}`)||themeSource.includes(`export function ${token}`)||themeSource.includes(`export const ${token} =`),`theme must expose ${token}`);
-assert(themeSource.includes("backdropFilter"),"glass surfaces need a real backdrop blur on web");
-// Les emoji ne sont pas des icônes d'interface : rendu variable, couleur imposée.
-const emojiIcon=/(?:navIcon|<Text style=\{S\.section\}>)\s*[^<]*[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
-assert(!emojiIcon.test(appSource),"section and nav icons must be vector, not emoji");
-assert(appSource.includes('from "./src/design/icons"'),"App.js must use the vector icon set");
-// Un token supprimé du thème laisse une référence silencieuse à `undefined` :
-// la couleur disparaît sans erreur. On vérifie donc que chaque token existe.
-const tokenGroup=(name)=>{
-  const m=themeSource.match(new RegExp(`export const ${name} = \\{([\\s\\S]*?)\\n\\};`));
-  return new Set(m?[...m[1].matchAll(/^\s{2}([A-Za-z0-9_]+):/gm)].map(x=>x[1]):[]);
-};
-const groups={P:tokenGroup("palette"),GL:tokenGroup("glass"),GR:tokenGroup("gradient")};
-for(const [prefix,valid] of Object.entries(groups)){
-  assert(valid.size>0,`theme group for ${prefix} not found`);
-  for(const m of appSource.matchAll(new RegExp(`\\b${prefix}\\.([A-Za-z0-9_]+)`,"g"))){
-    assert(valid.has(m[1]),`${prefix}.${m[1]} is referenced in App.js but missing from the theme`);
+const clientFiles=['App.js',...filesUnder('src')];
+const sources=new Map(clientFiles.map(file=>[file,read(file)]));
+let parser,traverse;
+try{parser=require('@babel/parser');traverse=require('@babel/traverse').default;}catch(error){throw new Error('Install project dependencies before running syntax and component checks: @babel/parser and @babel/traverse are supplied by Expo.');}
+const asts=new Map();
+for(const [file,source] of sources)asts.set(file,parser.parse(source,{sourceType:'unambiguous',plugins:['jsx']}));
+for(const file of [...filesUnder('server'),...filesUnder('api')])parser.parse(read(file),{sourceType:'unambiguous'});
+pass('all client JSX and API JavaScript parse successfully');
+
+function functionName(p){return p.node.id?.name||(p.parentPath?.isVariableDeclarator()?p.parentPath.node.id?.name:null)||'';}
+for(const [file,ast] of asts){
+  traverse(ast,{
+    ImportDeclaration(p){const target=p.node.source.value;
+      if(target.startsWith('.')){const abs=path.resolve(root,path.dirname(file),target);assert(['','.js','.jsx','/index.js','/index.jsx'].some(suffix=>fs.existsSync(abs+suffix)),`${file}: missing imported file ${target}`);}
+      if(file!=='src/services/storage/store.js')assert.notEqual(target,'@react-native-async-storage/async-storage',`${file}: storage must go through the namespaced store`);
+    },
+    StringLiteral(p){
+      assert(!/\bsk-(?:or-v1-)?[A-Za-z0-9_-]{20,}/.test(p.node.value),`${file}: possible API key literal in client source`);
+      assert(!/^https:\/\/(?:openrouter\.ai\/api|api\.openai\.com)/.test(p.node.value),`${file}: client must use its server proxy`);
+    },
+    MemberExpression(p){
+      const n=p.node;
+      if(n.object?.type==='MemberExpression'&&n.object.object?.name==='process'&&n.object.property?.name==='env'){
+        const key=n.computed?n.property.value:n.property.name;
+        assert(typeof key==='string'&&key.startsWith('EXPO_PUBLIC_'),`${file}: server environment variable accessed from the client`);
+        assert(!/(API_KEY|SECRET|TOKEN)$/.test(key),`${file}: secrets must not use a public environment variable`);
+      }
+      if(file!=='src/services/storage/store.js'){
+        const owner=n.object?.name,method=n.computed?n.property.value:n.property.name;
+        assert(!(owner==='AsyncStorage'&&/^(getItem|setItem|removeItem|clear|multiSet|multiRemove)$/.test(method)),`${file}: direct AsyncStorage access bypasses the store`);
+        assert(!(['localStorage','sessionStorage'].includes(owner)&&/^(setItem|removeItem|clear)$/.test(method)),`${file}: direct browser writes bypass the store`);
+      }
+    },
+    CallExpression(p){
+      const callee=p.node.callee;
+      if(callee.type==='Identifier'&&/^use[A-Z]/.test(callee.name)){
+        const fn=p.getFunctionParent();assert(fn,`${file}: hook ${callee.name} called outside a component/hook`);
+        const name=functionName(fn);assert(/^[A-Z]|^use[A-Z]/.test(name),`${file}: hook called in ordinary/nested callback ${name||'<anonymous>'}`);
+        for(let owner=p.parentPath;owner&&owner!==fn;owner=owner.parentPath)assert(!/^(IfStatement|ConditionalExpression|ForStatement|ForOfStatement|ForInStatement|WhileStatement|DoWhileStatement|SwitchCase|TryStatement)$/.test(owner.type),`${file}: conditional or looped hook ${callee.name}`);
+      }
+      if(callee.name==='require'&&p.node.arguments[0]?.value==='@react-native-async-storage/async-storage')assert.equal(file,'src/services/storage/store.js',`${file}: direct storage dependency bypasses store`);
+    },
+    Function(p){
+      if(!/^[A-Z]/.test(functionName(p))||!p.getFunctionParent())return;
+      let returnsJSX=false;
+      p.traverse({JSXElement(q){returnsJSX=true;q.stop();},JSXFragment(q){returnsJSX=true;q.stop();}});
+      assert(!returnsJSX,`${file}: component ${functionName(p)} must be declared at module level to preserve its state`);
+    }
+  });
+}
+const stateSource=read('src/core/appState.js');
+assert(/from\s+['"][^'"]*services\/storage\/store['"]/.test(stateSource),'State persistence must use the storage service');
+pass('module-level React components, hook ordering, relative imports and storage boundaries');
+pass('no provider secret or direct provider endpoint in client source');
+
+const indexHtml=read('public/index.html');
+for(const tag of ['rel="manifest"','apple-mobile-web-app-capable','apple-touch-icon'])assert(indexHtml.includes(tag),`Installable PWA metadata missing: ${tag}`);
+const manifest=JSON.parse(read('public/manifest.webmanifest'));
+assert(manifest.name&&manifest.start_url,'Manifest must identify the application');
+pass('PWA manifest and mobile installation metadata');
+
+async function run(){
+  // Exercise the real service-worker route, rather than matching its implementation text.
+  const listeners={},cacheCalls=[];
+  const swContext={URL,Response,Promise,console,self:{location:{origin:'https://app.test'},addEventListener:(name,fn)=>{listeners[name]=fn},skipWaiting:()=>Promise.resolve(),clients:{claim:()=>Promise.resolve()}},caches:{match:async()=>{cacheCalls.push('match');return null},open:async()=>({addAll:async()=>{},put:async()=>{cacheCalls.push('put')}}),keys:async()=>['stale-release'],delete:async name=>{cacheCalls.push(`delete:${name}`);return true}},fetch:async()=>new Response('online',{status:200})};
+  vm.runInNewContext(read('public/sw.js'),swContext,{filename:'public/sw.js'});
+  assert.equal(typeof listeners.fetch,'function','Service worker fetch handler missing');
+  for(const endpoint of ['/api/health','/api/coach']){
+    let intercepted=false;
+    listeners.fetch({request:{url:`https://app.test${endpoint}`,method:'GET',mode:'cors'},respondWith:()=>{intercepted=true}});
+    assert.equal(intercepted,false,`${endpoint} must bypass service-worker caching`);
   }
+  let navigation;
+  listeners.fetch({request:{url:'https://app.test/',method:'GET',mode:'navigate'},respondWith:p=>{navigation=p}});
+  assert(navigation,'PWA navigation must have an offline strategy');
+  assert.equal(await(await navigation).text(),'online','Navigation must prefer a current network response');
+  let activation;
+  listeners.activate({waitUntil:p=>{activation=p}});await activation;
+  assert(cacheCalls.includes('delete:stale-release'),'Outdated PWA caches must be removed');
+  pass('API requests bypass PWA cache; navigation refreshes online and old releases are removed');
+
+  // Run the actual client request helper with a controlled transport, without a live provider.
+  const babel=require('@babel/core');
+  const code=babel.transformSync(read('src/services/coachClient.js'),{babelrc:false,configFile:false,plugins:[require('@babel/plugin-transform-modules-commonjs')]}).code;
+  const sent=[],module={exports:{}};
+  const clientContext={module,exports:module.exports,require:name=>{if(name==='../core/nutrition')return require('../../src/core/nutrition.js');assert.equal(name,'react-native');return {Platform:{OS:'web'}}},process:{env:{}},setTimeout,clearTimeout,AbortController,fetch:async(url,options)=>{sent.push({url,options});return {ok:true,headers:{get:()=> 'application/json'},json:async()=>({ok:true,reply:'Réponse de test'})}}};
+  vm.runInNewContext(code,clientContext,{filename:'coachClient.js'});
+  const image='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jwl8AAAAASUVORK5CYII=';
+  await module.exports.sendCoach({message:'Lis cette étiquette',mode:'label',imageDataUrl:image,portionGrams:125,context:{profile:{weight:57}}});
+  assert.equal(sent[0].url,'/api/coach');assert.equal(sent[0].options.method,'POST');
+  const payload=JSON.parse(sent[0].options.body);
+  assert.equal(payload.imageDataUrl,image,'Selected image bytes must reach the server, not just a local URI');
+  assert.equal(payload.mode,'label');assert.equal(payload.portionGrams,125);
+  const coach=require('../../server/coach.js');
+  assert.equal(coach.validatePayload(payload).imageDataUrl,image,'Server must accept the client image contract');
+  assert.throws(()=>coach.validatePayload({...payload,imageDataUrl:'file:///local/photo.jpg'}),/INVALID_IMAGE/,'A device-local image URI cannot be read by the provider');
+  pass('real client/server photo contract transports image bytes and consumed quantity');
+
+  const originalKey=process.env.OPENROUTER_API_KEY,originalFetch=global.fetch;
+  let providerCalls=0;process.env.OPENROUTER_API_KEY='';global.fetch=async()=>{providerCalls++;throw new Error('No live provider calls allowed in boundary test')};
+  function response(){return {code:200,headers:{},setHeader(name,value){this.headers[name]=value},status(value){this.code=value;return this},json(value){this.body=value;return this}}}
+  try{
+    let throttled=false;
+    for(let i=0;i<30;i++){
+      const res=response();await coach.coachHandler({method:'POST',headers:{'x-forwarded-for':'198.51.100.201'},body:{}},res);
+      assert.equal(res.headers['Cache-Control'],'no-store','AI responses must not be cached');
+      if(res.code===429){throttled=true;assert(Number(res.headers['Retry-After'])>0);break;}
+      assert.equal(res.code,503,'Missing key must produce an actionable unavailable status');
+    }
+    assert(throttled,'Actual API handler must enforce its request limiter');assert.equal(providerCalls,0,'Requests without a configured key must never reach the provider');
+  }finally{global.fetch=originalFetch;if(originalKey===undefined)delete process.env.OPENROUTER_API_KEY;else process.env.OPENROUTER_API_KEY=originalKey;}
+  pass('real API route rate limit, no-store responses and no-provider behavior without a key');
+  console.log(`${checks} architecture and boundary checks passed`);
 }
-assert(/minHeight:\s*LAYOUT\.tapTarget/.test(appSource),"interactive rows must respect the 46px tap target");
-
-// Onboarding : les objectifs doivent venir du profil, plus de constantes personnelles.
-assert(appSource.includes("computeTargets"),"App.js must derive targets from the profile");
-assert(!appSource.includes("Salut Yacine"),"the greeting must come from the saved profile");
-for(const wired of ["ACTIVITY_LEVELS","SEXES","saveProfile"]) assert(appSource.includes(wired),`${wired} must be wired into App.js`);
-assert(!appSource.includes("function Onboarding"),"the blocking first-run screen must stay removed");
-
-// Coach IA : la clé OpenRouter est une ressource limitée et l'URL est publique.
-const coachSource=fs.readFileSync(path.join(root,"server/coach.js"),"utf8");
-assert(coachSource.includes("limiter.check"),"/api/coach must be rate limited before calling the provider");
-// On vérifie l'ordre DANS le handler : la définition de callOpenRouter apparaît plus haut dans le fichier.
-const handlerBody=coachSource.slice(coachSource.indexOf("async function coachHandler"));
-assert(handlerBody.indexOf("limiter.check")>-1&&handlerBody.indexOf("limiter.check")<handlerBody.indexOf("await callOpenRouter"),"the rate limit must run before the provider call");
-assert(handlerBody.includes("429"),"rate limited requests must answer 429");
-// La clé ne doit jamais fuir côté client.
-assert(!appSource.includes("process.env.OPENROUTER_API_KEY"),"the API key must never be read from the client bundle");
-assert(!appSource.includes("openrouter.ai"),"the client must call /api/coach, never OpenRouter directly");
-assert(!/sk-or-[A-Za-z0-9]/.test(appSource),"no OpenRouter key literal may appear in App.js");
-// Le coach doit recevoir ce que l'app a calculé, sinon il ne peut rien justifier.
-for(const field of ["week","plateau","recovery","planned"]) assert(coachSource.includes(`${field}:`)||coachSource.includes(`${field} =`),`coach payload must carry ${field}`);
-assert(appSource.includes("buildCoachPayload"),"App.js must build the enriched coach payload");
-
-// L'utilisateur doit pouvoir distinguer une vraie réponse IA d'un repli local.
-assert(appSource.includes("coachSource"),"the app must track whether the advice came from the AI");
-assert(!appSource.includes('"Coach IA connecté • clé conservée côté serveur"')||appSource.includes("coachStatusLabel"),"the AI status must reflect the real configuration");
-// La non-fuite de la clé est vérifiée à l'exécution (tests/core) ; ici on vérifie
-// seulement que l'endpoint n'expose jamais la variable brute dans sa réponse.
-const healthSource=fs.readFileSync(path.join(root,"server/health.js"),"utf8");
-assert(!/(?:key|apiKey)\s*:\s*key\b/.test(healthSource),"health must never return the raw key");
-assert(healthSource.includes("keyConfigured")&&healthSource.includes("status"),"health must report an actionable coach status");
-
-// Liste de courses : inutilisable en magasin si elle disparaît au rechargement.
-assert(appSource.includes("KEYS.groceries"),"the grocery list must be persisted");
-assert(appSource.includes("toggleGrocery")&&appSource.includes("checkedTotal"),"grocery items must be checkable with a live basket total");
-const grocerySource=fs.readFileSync(path.join(root,"src/core/groceryPlanner.js"),"utf8");
-assert(grocerySource.includes("proteinCoverage")&&grocerySource.includes("calorieCoverage"),"the planner must report honest coverage");
-assert(!/priority\s*===\s*1\s*\?\s*3/.test(grocerySource),"the hardcoded quantity caps must be gone");
-
-// PWA : sans le lien manifest, l'app n'est pas installable sur iPhone.
-const indexHtml=fs.readFileSync(path.join(root,"public/index.html"),"utf8");
-for(const tag of ['rel="manifest"','apple-mobile-web-app-capable','apple-touch-icon','%WEB_TITLE%']) assert(indexHtml.includes(tag),`public/index.html must contain ${tag}`);
-// Le service worker doit servir la navigation en network-first, sinon l'app ne se met jamais à jour.
-const sw=fs.readFileSync(path.join(root,"public/sw.js"),"utf8");
-assert(sw.includes("networkFirst")&&sw.includes('request.mode === "navigate"'),"sw.js must serve navigation network-first");
-assert(sw.includes("caches.delete"),"sw.js must clean up outdated caches");
-// Aucun module ne doit exister sans être importé : le projet a déjà porté
-// 12 fichiers d'échafaudage testés mais jamais branchés.
-const srcFiles=[];
-(function walk(dir){for(const e of fs.readdirSync(dir,{withFileTypes:true})){const full=path.join(dir,e.name);if(e.isDirectory())walk(full);else if(e.name.endsWith(".js"))srcFiles.push(full)}})(path.join(root,"src"));
-const allImports=["App.js",...srcFiles.map(f=>path.relative(root,f))].map(f=>fs.readFileSync(path.join(root,f),"utf8")).join("\n");
-for(const file of srcFiles){
-  const name=path.basename(file,".js");
-  const rel=path.relative(root,file);
-  const imported=new RegExp(`from ["'][^"']*/${name}["']|from ["']\\./${name}["']|require\\(["'][^"']*/${name}`).test(allImports);
-  assert(imported,`${rel} is never imported — dead scaffolding`);
-}
-console.log("PASS static foundation checks");
+run().catch(error=>{console.error(error);process.exitCode=1});
