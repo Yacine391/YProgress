@@ -7,12 +7,12 @@ export const PROGRAM_START = '2026-10-27';
 export const PROGRAM_END = '2027-04-27';
 export const TRAINING_DAYS = [
   {dayIndex:0,key:'sun',label:'Dimanche',short:'DIM',type:'recovery',workoutId:'recovery',title:'Recharge'},
-  {dayIndex:1,key:'mon',label:'Lundi',short:'LUN',type:'strength',workoutId:'a',title:'Full body A'},
+  {dayIndex:1,key:'mon',label:'Lundi',short:'LUN',type:'strength',workoutId:'upperA',title:'Upper / Lower · alternance'},
   {dayIndex:2,key:'tue',label:'Mardi',short:'MAR',type:'mma',workoutId:'mma',title:'MMA au club'},
-  {dayIndex:3,key:'wed',label:'Mercredi',short:'MER',type:'optional',workoutId:'optional',title:'Mobilité · option légère'},
+  {dayIndex:3,key:'wed',label:'Mercredi',short:'MER',type:'strength',workoutId:'lowerA',title:'Lower / Upper · alternance'},
   {dayIndex:4,key:'thu',label:'Jeudi',short:'JEU',type:'mma',workoutId:'mma',title:'MMA au club'},
-  {dayIndex:5,key:'fri',label:'Vendredi',short:'VEN',type:'recovery',workoutId:'recovery',title:'Récupération'},
-  {dayIndex:6,key:'sat',label:'Samedi',short:'SAM',type:'strength',workoutId:'b',title:'Full body B'},
+  {dayIndex:5,key:'fri',label:'Vendredi',short:'VEN',type:'strength',workoutId:'upperB',title:'Upper / Lower · alternance'},
+  {dayIndex:6,key:'sat',label:'Samedi',short:'SAM',type:'recovery',workoutId:'recovery',title:'Récupération'},
 ];
 export const MUSCLE_GROUPS = [
   {id:'chest',label:'Pectoraux',parts:['Faisceau claviculaire (haut)','Faisceau sternocostal'],partIds:['upper-chest','chest'],description:'Les développés sollicitent les pectoraux ensemble. L’inclinaison change l’accent, sans isoler une zone à 100 %.'},
@@ -65,23 +65,37 @@ for (const exercise of EXERCISES) {
 export const EXERCISE_BY_ID = Object.fromEntries(EXERCISES.map(e=>[e.id,e]));
 
 export const WORKOUT_PLANS = {
-  a:{id:'a',title:'Full body A',type:'strength',durationMin:65,duration:'55–75 min',focus:'Jambes · pectoraux · dos · épaules · bras · gainage',exerciseIds:['leg-press','incline-db-press','lat-pulldown','leg-curl','lateral-raise','db-curl','triceps-pushdown','plank']},
-  b:{id:'b',title:'Full body B',type:'strength',durationMin:70,duration:'60–80 min',focus:'Jambes · pectoraux · dos · arrière d’épaules · bras · mollets',exerciseIds:['goblet-squat','incline-db-press','cable-row','db-rdl','reverse-fly','hammer-curl','overhead-triceps','calf-raise']},
-  expressA:{id:'expressA',title:'L’essentiel A · 20 min',type:'strength',durationMin:20,duration:'20–25 min',focus:'Pousser · tirer · jambes',exerciseIds:['leg-press','incline-db-press','lat-pulldown']},
-  expressB:{id:'expressB',title:'L’essentiel B · 20 min',type:'strength',durationMin:20,duration:'20–25 min',focus:'Pousser · tirer · jambes',exerciseIds:['goblet-squat','incline-db-press','cable-row']},
-  optional:{id:'optional',title:'Récupération entre les MMA',type:'optional',durationMin:20,duration:'10–20 min, facultatif',focus:'Marche douce · mobilité · sommeil',exerciseIds:[],notes:['Les 4 premières semaines : récupération uniquement.','Après 4 semaines, si tu récupères bien : 1–2 séries faciles d’élévations latérales et de mollets. Aucune obligation.','Ne rattrape pas une séance manquée entre deux entraînements MMA difficiles.']},
+  upperA:{id:'upperA',title:'Upper A · haut du corps',split:'upper',type:'strength',durationMin:60,duration:'50–65 min',focus:'Pectoraux · dos · épaules latérales · biceps · triceps',exerciseIds:['incline-db-press','lat-pulldown','cable-row','lateral-raise','db-curl','triceps-pushdown']},
+  upperB:{id:'upperB',title:'Upper B · haut du corps',split:'upper',type:'strength',durationMin:65,duration:'55–70 min',focus:'Pectoraux · dos · épaules avant et arrière · bras',exerciseIds:['machine-chest-press','cable-row','shoulder-press','reverse-fly','hammer-curl','overhead-triceps']},
+  lowerA:{id:'lowerA',title:'Lower A · bas du corps',split:'lower',type:'strength',durationMin:55,duration:'45–60 min',focus:'Quadriceps · ischio-jambiers · fessiers · mollets · gainage',exerciseIds:['leg-press','db-rdl','leg-curl','calf-raise','plank']},
+  lowerB:{id:'lowerB',title:'Lower B · bas du corps',split:'lower',type:'strength',durationMin:55,duration:'45–60 min',focus:'Cuisses · chaîne postérieure · mollets · sangle abdominale',exerciseIds:['goblet-squat','db-rdl','leg-curl','calf-raise','plank']},
+  expressUpperA:{id:'expressUpperA',title:'Upper A · essentiel',split:'upper',type:'strength',durationMin:20,duration:'20–25 min',focus:'Pectoraux · dos · épaules',exerciseIds:['incline-db-press','lat-pulldown','lateral-raise']},
+  expressUpperB:{id:'expressUpperB',title:'Upper B · essentiel',split:'upper',type:'strength',durationMin:20,duration:'20–25 min',focus:'Pectoraux · dos · arrière d’épaules',exerciseIds:['machine-chest-press','cable-row','reverse-fly']},
+  expressLowerA:{id:'expressLowerA',title:'Lower A · essentiel',split:'lower',type:'strength',durationMin:20,duration:'20–25 min',focus:'Quadriceps · ischios · mollets',exerciseIds:['leg-press','leg-curl','calf-raise']},
+  expressLowerB:{id:'expressLowerB',title:'Lower B · essentiel',split:'lower',type:'strength',durationMin:20,duration:'20–25 min',focus:'Cuisses · ischios · gainage',exerciseIds:['goblet-squat','leg-curl','plank']},
   mma:{id:'mma',title:'MMA au club',type:'mma',durationMin:null,duration:'Selon ton cours',focus:'Mardi & jeudi · séance encadrée',exerciseIds:[],notes:['Suis le contenu et l’intensité donnés par ton entraîneur.','Note la durée et la difficulté après le cours. Aucun sparring supplémentaire à rattraper.']},
-  recovery:{id:'recovery',title:'Récupération',type:'recovery',durationMin:0,duration:'Repos · marche si tu en as envie',focus:'Récupérer fait partie du programme',exerciseIds:[],notes:['Sommeil régulier et repas suffisants.','Prépare ton sac et choisis ton prochain créneau.','Une journée de repos n’est pas un échec.']},
+  recovery:{id:'recovery',title:'Récupération',type:'recovery',durationMin:0,duration:'Repos · samedi et dimanche',focus:'Récupérer fait partie du programme',exerciseIds:[],notes:['Le week-end est réservé à la récupération. Marche douce ou mobilité si tu en as envie.','Sommeil régulier et repas suffisants. Prépare ton sac pour lundi.','Une séance manquée ne se rattrape pas obligatoirement le week-end. Reprends au prochain créneau prévu.']},
 };
 
+// Upper / Lower alternent sur les six créneaux de deux semaines. Le MMA
+// reste une séance à part entière ; les jours salle ne doublent pas les cours.
+export const TRAINING_CYCLE = [
+  {1:'upperA',3:'lowerA',5:'upperB'},
+  {1:'lowerA',3:'upperA',5:'lowerB'},
+];
+const MAIN_LIFTS = new Set(['leg-press','incline-db-press','lat-pulldown','goblet-squat','cable-row','machine-chest-press','db-rdl']);
 export function getSession(dayIndex, {mode='normal',week=1}={}) {
   const day=TRAINING_DAYS.find(d=>d.dayIndex===Number(dayIndex)) || TRAINING_DAYS[0];
-  let plan=WORKOUT_PLANS[day.workoutId];
-  if(day.type==='strength' && mode==='express') plan=WORKOUT_PLANS[day.workoutId==='a'?'expressA':'expressB'];
-  const gentle=mode==='gentle';
-  const beginner=Math.max(1,Number(week)||1)<=2;
-  const exercises=plan.exerciseIds.map(id=>({...EXERCISE_BY_ID[id],sets:gentle?1:((!beginner && !mode.startsWith('express') && ['leg-press','incline-db-press','lat-pulldown','goblet-squat','cable-row'].includes(id))?3:2),rir:gentle?4:(beginner?3:2)}));
-  return {...plan,dayIndex:day.dayIndex,dayKey:day.key,exercises,mode,week:Math.max(1,Number(week)||1),warmup:'5–8 min faciles, puis 1–2 séries d’échauffement légères sur les premiers mouvements. Elles ne comptent pas comme séries de travail.',effort:gentle?'Technique facile : garde au moins 4 répétitions en réserve.':beginner?'Pendant 2 semaines : apprends les gestes et garde environ 3 répétitions en réserve.':'Garde environ 2 répétitions en réserve, sans échec forcé.',progression:'Quand toutes tes séries atteignent le haut de la fourchette avec une technique stable et au moins 2 répétitions en réserve sur 2 séances : augmente du plus petit palier disponible, puis repars en bas de la fourchette.',recovery:'Si tu récupères mal, choisis la version allégée ou le repos. Si la fatigue s’accumule sur plusieurs séances, réduis les séries de moitié pendant une semaine et parle-en à ton entraîneur.',stopRule:'Une douleur vive, articulaire, un malaise ou une technique qui se dégrade : arrête la série. Une fatigue persistante mérite un avis médical.'};
+  const weekNumber=Math.max(1,Math.floor(Number(week)||1));
+  const cycleIndex=(weekNumber-1)%TRAINING_CYCLE.length;
+  const safeMode=['normal','express','gentle'].includes(mode)?mode:'normal';
+  const planId=day.type==='strength'?TRAINING_CYCLE[cycleIndex][day.dayIndex]:day.workoutId;
+  let plan=WORKOUT_PLANS[planId];
+  if(day.type==='strength' && safeMode==='express')plan=WORKOUT_PLANS['express'+planId[0].toUpperCase()+planId.slice(1)];
+  const gentle=safeMode==='gentle',beginner=weekNumber<=2;
+  const exercises=plan.exerciseIds.map(id=>({...EXERCISE_BY_ID[id],sets:gentle?1:(!beginner&&safeMode==='normal'&&MAIN_LIFTS.has(id)?3:2),rir:gentle?4:(beginner?3:2)}));
+  const duration=gentle&&day.type==='strength'?{durationMin:30,duration:'25–35 min · une série par exercice'}:{};
+  return {...plan,...duration,basePlanId:planId,dayIndex:day.dayIndex,dayKey:day.key,exercises,mode:safeMode,week:weekNumber,cycleWeek:cycleIndex+1,warmup:'5–8 min faciles, puis 1–2 séries d’échauffement légères sur les premiers mouvements. Elles ne comptent pas comme séries de travail.',effort:gentle?'Technique facile : garde au moins 4 répétitions en réserve.':beginner?'Pendant 2 semaines : apprends les gestes et garde environ 3 répétitions en réserve.':'Garde environ 2 répétitions en réserve, sans échec forcé.',progression:'Quand toutes tes séries atteignent le haut de la fourchette avec une technique stable et au moins 2 répétitions en réserve sur 2 séances : augmente du plus petit palier disponible, puis repars en bas de la fourchette.',recovery:'Trois séances de salle et deux cours de MMA sollicitent ta récupération. Si tu récupères mal, choisis la version allégée ou le repos. Une fatigue qui s’accumule : réduis les séries de moitié pendant une semaine et parle-en à ton entraîneur. Ne compense pas le week-end.',stopRule:'Une douleur vive, articulaire, un malaise ou une technique qui se dégrade : arrête la série. Une fatigue persistante mérite un avis médical.'};
 }
 
 export function localDateKey(input=new Date()) {
@@ -97,8 +111,12 @@ const dayNumber=value=>{
   const date=new Date(`${key}T12:00:00Z`); return Number.isFinite(date.getTime()) && date.toISOString().slice(0,10)===key ? Math.floor(date.getTime()/86400000):NaN;
 };
 export function weekFromStart(start=PROGRAM_START,current=new Date()) {
-  const elapsed=dayNumber(current)-dayNumber(start);
-  return Number.isFinite(elapsed)?Math.max(1,Math.floor(elapsed/7)+1):1;
+  const first=dayNumber(start),now=dayNumber(current);
+  if(!Number.isFinite(first)||!Number.isFinite(now))return 1;
+  // Semaines lundi→dimanche, ancrées sur la première séance réelle. Le début
+  // en milieu de semaine ne crée ainsi pas deux Upper/Lower consécutifs.
+  const monday=value=>value-((new Date(value*86400000).getUTCDay()+6)%7);
+  return Math.max(1,Math.floor((monday(now)-monday(first))/7)+1);
 }
 export function dayIndexForDate(input=new Date()) {
   const key=localDateKey(input);

@@ -1,6 +1,6 @@
-# YProgress 17 — une routine qui tient
+# YProgress 18 — simple, upper/lower et mouvements animés
 
-Version du 27 octobre 2026. Refonte de l’application Expo / React Native, utilisable sur le web et préparée pour mobile. Aucun compte utilisateur ni clé IA n’est inclus.
+Version 18 du 27 octobre 2026. Refonte de l’application Expo / React Native, utilisable sur le web et préparée pour mobile. Aucun compte utilisateur ni clé IA n’est inclus.
 
 ## Ouvrir la version web incluse
 
@@ -18,12 +18,12 @@ N’ouvre pas directement `dist/index.html` : l’application et son API ont bes
 
 ## Ce qui a changé
 
-- Interface sombre graphite et vert citron ; menu latéral ordinateur et barre de navigation mobile.
+- Interface claire et sobre : blanc, gris et noir, cartes discrètes, menu latéral ordinateur et barre de navigation mobile.
 - Date calculée en Europe/Paris, actualisée à minuit et au retour dans l’application. Départ de référence : 27/10/2026, horizon de travail : 27/04/2027.
 - Poids déclaré de départ actualisé à **57 kg**, contre l’ancien repère de 55 kg. Aucun entraînement passé inventé. L’âge et la taille de l’ancienne version doivent être confirmés avant l’affichage d’un objectif calorique.
-- **MMA mardi et jeudi. Musculation lundi et samedi**, environ 55–80 minutes, sous 90 minutes. Mercredi facultatif et léger ; vendredi/dimanche récupération. Les deux premières semaines du programme ne commencent pas à vieillir tant qu’aucune séance n’a été faite.
-- Version express 20–25 min et version allégée. Une séance courte compte ; aucune séance manquée n’entraîne de rattrapage punitif.
-- Catalogue de 17 exercices : muscles principaux et complémentaires, sous-zones, consignes, alternatives et démonstration propre à chaque mouvement. Épaule : trois faisceaux du deltoïde ; coiffe de quatre muscles distincte. Les lecteurs YouTube sont limités à un extrait de deux minutes ; deux mouvements renvoient à leur page MuscleWiki dédiée. La lecture externe dépend de la connexion, de la disponibilité et des restrictions de la plateforme.
+- **Upper/lower lundi, mercredi et vendredi. MMA mardi et jeudi. Récupération samedi et dimanche.** Trois séances de salle sans doubler le MMA le même jour. Semaine 1 : Upper A / Lower A / Upper B ; semaine 2 : Lower A / Upper A / Lower B. L’alternance continue toutes les deux semaines. Les séances durent environ 45–70 minutes, sous 90 minutes. Le cycle est ancré sur la première vraie séance, pas sur des semaines fictives déjà effectuées.
+- Version express 20–25 min et version allégée de 25–35 min, une série par mouvement. Une séance courte compte ; aucune séance manquée n’entraîne de rattrapage punitif.
+- Catalogue de 17 exercices : muscles principaux et complémentaires, sous-zones, consignes, alternatives et démonstration propre à chaque mouvement. Épaule : trois faisceaux du deltoïde ; coiffe de quatre muscles distincte. Chaque exercice ouvre un petit personnage animé localement, en boucle de quelques secondes, avec son matériel. Lecture/pause, ralenti et positions de départ/arrivée. Aucun lecteur YouTube, aucune publicité ni vidéo longue. Les démonstrations fonctionnent sans connexion une fois l’application chargée. Ce sont des repères schématiques à compléter par les consignes et la vérification du geste lors des premières séances.
 - Saisie par série : kg, répétitions/secondes, répétitions en réserve (RIR), case faite, minuteur de repos et note. Seules les séries cochées sont ajoutées au carnet. Les charges de départ ne sont pas imposées ; la progression s’appuie sur deux dates réellement entraînées et maîtrisées.
 - Repas, hydratation, whey selon étiquette et protéines déjà notées, créatine quotidienne, fiches produit et notes d’emballage. À 57 kg : repère de 91–114 g de protéines totales, cible pratique 110 g. Créatine monohydrate : 3 g/j, sans charge ni double dose après oubli, pour un adulte en bonne santé. Un journal vide ou incomplet ne produit pas de prescription de whey.
 - Courbe de poids sans données fictives, mensurations, charges et photos de suivi. L’image fournie est marquée comme **simulation IA d’inspiration**, jamais comme résultat promis. Le poids ne mesure pas à lui seul le muscle gagné.
@@ -69,7 +69,7 @@ Sur Vercel : framework Other, `npm run build:web`, sortie `dist`, fonctions `api
 
 Le journal reste dans le navigateur/appareil. Effacer les données, changer de domaine, de port ou de navigateur peut le rendre inaccessible. Exporte régulièrement le JSON depuis Profil ; la sauvegarde contient aussi les photos de suivi et doit rester privée. Pas de synchronisation cloud automatique ni de notification distante garantie.
 
-Les tests couvrent moteurs, dates Paris, sauvegardes et migrations, portions, contrats client/serveur, erreurs IA et 36 rendus React avec données initiales et réelles. Le build de production a été généré. Le navigateur de contrôle distant n’accédait pas au localhost du projet : aucune validation visuelle ou interaction réelle sur téléphone n’est annoncée. Caméra, lecteurs externes et appel fournisseur réel restent à essayer dans ton environnement.
+Les tests couvrent moteurs, dates Paris, sauvegardes et migrations, portions, contrats client/serveur, erreurs IA, rendus React des six écrans et des démonstrations locales, alternance upper/lower et repos du week-end. Le build de production a été généré. Le navigateur de contrôle distant n’accédait pas au localhost du projet : aucune validation visuelle ou interaction réelle sur téléphone n’est annoncée. Caméra et appel fournisseur réel restent à essayer dans ton environnement. Le timing des animations doit aussi être essayé sur ton appareil.
 
 Les limites de débit sont locales à une instance serveur ; un déploiement public multi-instance nécessite une protection de quota partagée. Ce projet est destiné à un usage personnel.
 

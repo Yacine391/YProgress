@@ -54,6 +54,8 @@ test('Paris midnight and weekly calendar agree with the MMA programme through DS
   const week = app.weekDates('2026-10-27');
   assert.deepEqual(week, ['2026-10-26','2026-10-27','2026-10-28','2026-10-29','2026-10-30','2026-10-31','2026-11-01']);
   assert.deepEqual(week.filter(date => training.getSession(app.dayIndex(date)).type === 'mma'), ['2026-10-27','2026-10-29']);
+  assert.deepEqual(week.filter(date => training.getSession(app.dayIndex(date)).type === 'strength'), ['2026-10-26','2026-10-28','2026-10-30']);
+  assert.deepEqual(week.filter(date => training.getSession(app.dayIndex(date)).type === 'recovery'), ['2026-10-31','2026-11-01']);
 });
 
 test('legacy migration keeps the raw historical record and imports meals without deleting old weights', async () => {

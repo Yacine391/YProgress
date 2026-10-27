@@ -1,4 +1,4 @@
-# API YProgress 17
+# API YProgress 18
 
 Node 22.12+ ; aucune dépendance serveur à installer.
 

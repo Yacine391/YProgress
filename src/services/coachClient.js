@@ -28,7 +28,7 @@ export function buildCoachContext(data,today){
   const supplements=Object.fromEntries(Object.entries(data.supplements||{}).map(([kind,value])=>[kind,{...value,brand:String(value?.brand||'').slice(0,150),notes:String(value?.notes||'').slice(0,1500)}]));
   const recentSessions=(data.sessions||[]).slice(-4).map(s=>({date:s.date,title:s.title,workoutId:s.workoutId,sets:(s.sets||[]).slice(-24).map(set=>({exerciseId:set.exerciseId,load:set.load,reps:set.reps}))}));
   const sleepHours=numeric(day.sleepHours);
-  return {date:today,profile:{name:data.profile?.name,weight:data.profile?.weight,goal:'Prise de muscle progressive',confirmed:!!data.profile?.confirmed},today:{total,water:day.water??null,sleepMin:sleepHours===null?null:Math.round(sleepHours*60)},schedule:'MMA mardi et jeudi ; musculation lundi et samedi, mercredi optionnel après adaptation.',trainingStartDate:data.startDate,energy:day.energy??null,habitPlan:data.preferences||{},sleepHours,meals,supplements,recentSessions,recentMessages,lastNutritionAnalysis:lastNutritionMessage?.nutrition||null};
+  return {date:today,profile:{name:data.profile?.name,weight:data.profile?.weight,goal:'Prise de muscle progressive',confirmed:!!data.profile?.confirmed},today:{total,water:day.water??null,sleepMin:sleepHours===null?null:Math.round(sleepHours*60)},schedule:'MMA mardi et jeudi ; upper/lower alterné lundi, mercredi et vendredi ; récupération samedi et dimanche.',trainingStartDate:data.startDate,energy:day.energy??null,habitPlan:data.preferences||{},sleepHours,meals,supplements,recentSessions,recentMessages,lastNutritionAnalysis:lastNutritionMessage?.nutrition||null};
 }
 export async function preparePickedImage(asset){
   if(!asset)throw new Error('Aucune photo sélectionnée.');

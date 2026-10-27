@@ -9,7 +9,7 @@ const exists=file=>fs.existsSync(path.join(root,file));
 let checks=0;
 function pass(label){checks++;console.log('PASS',label)}
 function filesUnder(directory){return fs.readdirSync(path.join(root,directory),{withFileTypes:true}).flatMap(e=>e.isDirectory()?filesUnder(`${directory}/${e.name}`):/\.[cm]?jsx?$/.test(e.name)?[`${directory}/${e.name}`]:[])}
-const required=['App.js','package.json','app.json','src/core/appState.js','src/core/trainingPlan.js','src/core/nutrition.js','src/services/storage/store.js','src/services/coachClient.js','server/coach.js','server/health.js','server/rateLimit.js','api/coach.js','api/health.js','public/index.html','public/sw.js','public/manifest.webmanifest'];
+const required=['App.js','package.json','app.json','src/core/appState.js','src/core/trainingPlan.js','src/core/exerciseMotion.js','src/core/nutrition.js','src/ui/ExerciseDemo.js','src/services/storage/store.js','src/services/coachClient.js','server/coach.js','server/health.js','server/rateLimit.js','api/coach.js','api/health.js','public/index.html','public/sw.js','public/manifest.webmanifest'];
 for(const file of required)assert(exists(file),`Missing required application boundary: ${file}`);
 const pkg=JSON.parse(read('package.json')),app=JSON.parse(read('app.json'));
 assert.equal(pkg.version,app.expo.version,'Package and Expo version must agree');
@@ -71,10 +71,30 @@ assert(/from\s+['"][^'"]*services\/storage\/store['"]/.test(stateSource),'State 
 pass('module-level React components, hook ordering, relative imports and storage boundaries');
 pass('no provider secret or direct provider endpoint in client source');
 
+// The requested interface is light and neutral. Validate the active design tokens,
+// rather than imposing legacy layouts, screen titles or decorative card counts.
+let palette;
+traverse(asts.get('src/ui/kit.js'),{VariableDeclarator(p){if(p.node.id?.name==='C'&&p.node.init?.type==='ObjectExpression')palette=Object.fromEntries(p.node.init.properties.filter(x=>x.type==='ObjectProperty'&&x.value.type==='StringLiteral').map(x=>[x.key.name||x.key.value,x.value.value]));}});
+assert(palette,'Active interface colour tokens are missing');
+function rgb(hex){assert(/^#[0-9a-f]{6}$/i.test(hex),`Expected a six-digit colour, received ${hex}`);return [1,3,5].map(i=>parseInt(hex.slice(i,i+2),16));}
+const brightness=hex=>rgb(hex).reduce((sum,value)=>sum+value,0)/(3*255);
+for(const key of ['bg','panel','raised']){const channels=rgb(palette[key]);assert(brightness(palette[key])>.88,`${key} must be a light background`);assert(Math.max(...channels)-Math.min(...channels)<25,`${key} must remain neutral`);}
+assert(brightness(palette.ink)<.3,'Primary text must remain dark on the light interface');
+assert.equal(app.expo.userInterfaceStyle,'light','Native app chrome must follow the light design');
+const demonstrationSources=['src/ui/TrainingScreen.js','src/ui/ExerciseDemo.js','src/core/exerciseMotion.js'];
+for(const file of demonstrationSources)traverse(asts.get(file),{
+  StringLiteral(p){assert(!/^https?:\/\//i.test(p.node.value),`${file}: the demonstration must not depend on a remote player or asset`);},
+  JSXIdentifier(p){assert(!['iframe','video'].includes(p.node.name),`${file}: demonstration must render locally`);},
+  CallExpression(p){const callee=p.node.callee;const name=callee?.type==='MemberExpression'?callee.property?.name:callee?.name;if(name==='createElement')assert(!['iframe','video'].includes(p.node.arguments[0]?.value),`${file}: demonstration must not create an external player`);if(callee?.type==='MemberExpression'&&callee.object?.name==='Linking')assert.notEqual(name,'openURL',`${file}: demonstration must not navigate to an external player`);}
+});
+assert(/from\s+['"]\.\/ExerciseDemo(?:\.js)?['"]/.test(read('src/ui/TrainingScreen.js')),'Training must use the local exercise demonstration component');
+pass('light neutral interface tokens and local exercise demonstrations without external players');
+
 const indexHtml=read('public/index.html');
 for(const tag of ['rel="manifest"','apple-mobile-web-app-capable','apple-touch-icon'])assert(indexHtml.includes(tag),`Installable PWA metadata missing: ${tag}`);
 const manifest=JSON.parse(read('public/manifest.webmanifest'));
 assert(manifest.name&&manifest.start_url,'Manifest must identify the application');
+assert(brightness(manifest.background_color)>.88&&brightness(manifest.theme_color)>.88,'Installed PWA chrome must remain light');
 pass('PWA manifest and mobile installation metadata');
 
 async function run(){

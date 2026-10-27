@@ -6,7 +6,7 @@ function healthHandler(req, res) {
   const key = (process.env.OPENROUTER_API_KEY || '').trim();
   const looksValid = /^sk-or-v1-[A-Za-z0-9]{16,}$/.test(key);
   return res.status(200).json({
-    ok: true, version: '17.0.0', model: modelChain()[0], visionModel: modelChain(true)[0],
+    ok: true, version: '18.0.0', model: modelChain()[0], visionModel: modelChain(true)[0],
     coach: {
       keyConfigured: Boolean(key), keyLooksValid: looksValid,
       status: !key ? 'MISSING_KEY' : !looksValid ? 'MALFORMED_KEY' : 'CONFIGURED_NOT_TESTED',
